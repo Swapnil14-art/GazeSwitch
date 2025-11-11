@@ -23,7 +23,7 @@ class EyeTraxWrapper(BaseTracker):
         features, blink = self.tracker.extract_features(frame)
         x, y = (
             self.tracker.predict([features])[0]
-            if features and not blink
+            if features is not None and not blink
             else (None, None)
         )
 
