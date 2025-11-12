@@ -1,15 +1,21 @@
-SRC = trackers evaluation main.py
+SRC = trackers evaluation
 
-.PHONY: all format lint check
+.PHONY: all format lint check run-eval
 
 all: format
 
 format:
-	autoflake --remove-all-unused-imports --recursive --in-place $(SRC)
-	isort $(SRC)
-	black $(SRC)
+	@echo Formatting source files...
+	@autoflake --remove-all-unused-imports --recursive --in-place $(SRC)
+	@isort $(SRC)
+	@black $(SRC)
 
 lint:
-	flake8 $(SRC)
+	@echo Linting source files...
+	@flake8 $(SRC)
+
+run-eval:
+	@echo Running evaluation...
+	@python -m evaluation.run_evaluation $(ARGS)
 
 check: format lint

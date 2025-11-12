@@ -71,3 +71,6 @@ class GazeFollowerWrapper(BaseTracker):
     def stop(self):
         self.gaze_follower.stop_sampling()
         self.gaze_follower.release()
+
+    def __str__(self):
+        return "gazefollower"

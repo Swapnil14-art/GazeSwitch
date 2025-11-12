@@ -35,3 +35,6 @@ class EyeTraxWrapper(BaseTracker):
 
     def stop(self):
         self.cap.release()
+
+    def __str__(self):
+        return "eyetrax"
