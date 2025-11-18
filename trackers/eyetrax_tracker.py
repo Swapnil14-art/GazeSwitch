@@ -7,14 +7,14 @@ from trackers.base_tracker import BaseTracker
 
 
 class EyeTraxWrapper(BaseTracker):
-    def __init__(self, calibrate: bool = False):
+    def __init__(self, calibrate: bool, calibration_mode: str):
         self.tracker = GazeEstimator()
 
         if calibrate:
             run_9_point_calibration(self.tracker)
-            self.tracker.save_model("models/eyetrax/gaze_model.pkl")
+            self.tracker.save_model(f"models/eyetrax/gaze_model_{calibration_mode}.pkl")
         else:
-            self.tracker.load_model("models/eyetrax/gaze_model.pkl")
+            self.tracker.load_model(f"models/eyetrax/gaze_model_{calibration_mode}.pkl")
 
         self.cap = cv2.VideoCapture(0)
 

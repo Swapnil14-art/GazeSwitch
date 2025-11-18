@@ -6,7 +6,14 @@ import time
 import tkinter as tk
 from datetime import datetime
 
-from evaluation.metrics import compute_euclidean_error, compute_zone_accuracy
+from evaluation.metrics import (
+    compute_confusion_matrix,
+    compute_euclidean_error,
+    compute_jitter,
+    compute_latency,
+    compute_validity,
+    compute_zone_accuracy,
+)
 from trackers.base_tracker import BaseTracker
 from trackers.eyetrax_tracker import EyeTraxWrapper
 from trackers.gaze_follower_tracker import GazeFollowerWrapper
@@ -104,6 +111,34 @@ def save_results(outfile: str, metrics: dict[str, float | None], args, timestamp
     print(f"Metrics saved to {metrics_path}")
 
 
+def load_samples(csv_file: str) -> list[dict[str, float | None]]:
+    """
+    Loads the gaze samples from the evaluation CSV file.
+
+    Args:
+        csv_file (str): The path to the CSV file.
+    Returns:
+        list[dict[str, float | None]]: A list of samples with ground truth and tracker coordinates.
+    """
+    samples = []
+
+    with open(csv_file, "r") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            samples.append(
+                {
+                    "gt_x": float(row["gt_x"]),
+                    "gt_y": float(row["gt_y"]),
+                    "tracker_x": float(row["tracker_x"]) if row["tracker_x"] else None,
+                    "tracker_y": float(row["tracker_y"]) if row["tracker_y"] else None,
+                    "timestamp": float(row["timestamp"]),
+                    "latency": float(row["latency"]),
+                }
+            )
+
+    return samples
+
+
 def run_evaluation(
     tracker: BaseTracker,
     screen_size: tuple[int, int],
@@ -135,10 +170,10 @@ def run_evaluation(
     csv_header = [
         "gt_x",
         "gt_y",
-        "timestamp_gt",
         "tracker_x",
         "tracker_y",
-        "timestamp_tracker",
+        "timestamp",
+        "latency",
     ]
     with open(outfile, "w", newline="") as f:
         writer = csv.writer(f)
@@ -154,25 +189,52 @@ def run_evaluation(
                 # Only sample after delay. This ensures we have time to show
                 # the point, and the user has time to look at it
                 if time.time() >= t_end - (hold_seconds - delay):
-                    gaze = tracker.get_data().get("gaze", None)
-                    ts = time.time()
-                    if gaze:
-                        tx = gaze["x"]
-                        ty = gaze["y"]
+                    ts_before = time.time()
+                    data = tracker.get_data()
+                    ts_after = time.time()
+                    if data:
+                        gaze = data.get("gaze", None)
+                        tx = gaze["x"] if gaze else None
+                        ty = gaze["y"] if gaze else None
 
-                        if tx and ty:
-                            writer.writerow([gx, gy, ts, tx, ty, ts])
+                        # Some trackers provide timestamps for each sample, so we
+                        # can compute latency more accurately
+                        gaze_timestamp = data.get("timestamp", None)
+                        latency = (
+                            gaze_timestamp - ts_before
+                            if gaze_timestamp
+                            else ts_after - ts_before
+                        )
+
+                        writer.writerow([gx, gy, tx, ty, ts_after, latency])
                 time.sleep(1.0 / 30.0)
 
     print(f"Evaluation data saved to {outfile}")
 
     # Compute evaluation metrics
-    mean_error = compute_euclidean_error(outfile)
-    zone_accuracy = compute_zone_accuracy(outfile, screen_size, grid_rows, grid_cols)
+    samples = load_samples(outfile)
+    valid_samples: list[dict[str, float]] = [
+        s for s in samples if s["tracker_x"] is not None and s["tracker_y"] is not None
+    ]  # type: ignore
+
+    mean_error = compute_euclidean_error(valid_samples)
+    zone_accuracy = compute_zone_accuracy(
+        valid_samples, screen_size, grid_rows, grid_cols
+    )
+    confusion_matrix = compute_confusion_matrix(
+        valid_samples, screen_size, grid_rows, grid_cols
+    )
+    latency = compute_latency(valid_samples)
+    jitter = compute_jitter(valid_samples)
+    validity = compute_validity(samples)
 
     metrics = {
         "mean_euclidean_error_pixels": mean_error,
         "zone_accuracy_percentage": zone_accuracy,
+        "confusion_matrix": confusion_matrix,
+        "latency": latency,
+        "jitter": jitter,
+        "validity": validity,
     }
     save_results(outfile, metrics, args, timestamp)
 
@@ -188,6 +250,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--tracker", choices=["eyetrax", "gazefollower"], default="eyetrax"
     )
+    parser.add_argument("--calibrate", type=bool, default=False)
+    parser.add_argument("--calibration-mode", type=str, default="with_glasses")
     parser.add_argument("--screen-w", type=int, default=screen_width)
     parser.add_argument("--screen-h", type=int, default=screen_height)
     parser.add_argument("--hold-seconds", type=float, default=4.0)
@@ -196,9 +260,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.tracker == "eyetrax":
-        tracker = EyeTraxWrapper()
+        tracker = EyeTraxWrapper(
+            calibrate=args.calibrate, calibration_mode=args.calibration_mode
+        )
     else:
-        tracker = GazeFollowerWrapper()
+        tracker = GazeFollowerWrapper(
+            calibrate=args.calibrate, calibration_mode=args.calibration_mode
+        )
 
     try:
         init_eval_ui((args.screen_w, args.screen_h))
@@ -212,3 +280,4 @@ if __name__ == "__main__":
         )
     finally:
         tracker.stop()
+        EVAL_UI_ROOT.destroy()  # type: ignore

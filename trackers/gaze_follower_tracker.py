@@ -7,9 +7,11 @@ from trackers.base_tracker import BaseTracker
 
 
 class GazeFollowerWrapper(BaseTracker):
-    def __init__(self, calibrate: bool = False):
+    def __init__(self, calibrate: bool, calibration_mode: str):
         self.gaze_follower = GazeFollower(
-            calibration=SVRCalibration(model_save_path="models/gaze_follower/")
+            calibration=SVRCalibration(
+                model_save_path="models/gaze_follower/" + calibration_mode
+            )
         )
 
         if calibrate:
