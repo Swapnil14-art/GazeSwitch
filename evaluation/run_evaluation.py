@@ -7,10 +7,12 @@ import tkinter as tk
 from datetime import datetime
 
 from evaluation.metrics import (
+    compute_accuracy,
     compute_confusion_matrix,
     compute_euclidean_error,
     compute_jitter,
     compute_latency,
+    compute_rms_s2s,
     compute_validity,
     compute_zone_accuracy,
 )
@@ -207,8 +209,9 @@ def run_evaluation(
                         )
 
                         writer.writerow([gx, gy, tx, ty, ts_after, latency])
-                time.sleep(1.0 / 30.0)
+                time.sleep(1.0 / 17.0)
 
+    EVAL_UI_ROOT.destroy()  # type: ignore
     print(f"Evaluation data saved to {outfile}")
 
     # Compute evaluation metrics
@@ -217,6 +220,8 @@ def run_evaluation(
         s for s in samples if s["tracker_x"] is not None and s["tracker_y"] is not None
     ]  # type: ignore
 
+    accuracy = compute_accuracy(valid_samples)
+    rms_s2s = compute_rms_s2s(valid_samples)
     mean_error = compute_euclidean_error(valid_samples)
     zone_accuracy = compute_zone_accuracy(
         valid_samples, screen_size, grid_rows, grid_cols
@@ -229,6 +234,8 @@ def run_evaluation(
     validity = compute_validity(samples)
 
     metrics = {
+        "accuracy": accuracy,
+        "rms_s2s": rms_s2s,
         "mean_euclidean_error_pixels": mean_error,
         "zone_accuracy_percentage": zone_accuracy,
         "confusion_matrix": confusion_matrix,
@@ -280,4 +287,3 @@ if __name__ == "__main__":
         )
     finally:
         tracker.stop()
-        EVAL_UI_ROOT.destroy()  # type: ignore

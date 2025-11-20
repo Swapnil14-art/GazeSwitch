@@ -1,5 +1,6 @@
 import math
 import statistics
+from collections import defaultdict
 
 
 def compute_euclidean_error(samples: list[dict[str, float]]) -> float | None:
@@ -98,8 +99,8 @@ def compute_confusion_matrix(samples, screen_size, rows, cols):
     matrix = [[0 for _ in range(n)] for _ in range(n)]
 
     for s in samples:
-        gt = get_zone(s["gt_x"], s["gt_y"], zones)
-        pred = get_zone(s["tracker_x"], s["tracker_y"], zones)
+        gt = get_zone(float(s["gt_x"]), float(s["gt_y"]), zones)
+        pred = get_zone(float(s["tracker_x"]), float(s["tracker_y"]), zones)
         if gt is not None and pred is not None:
             matrix[gt][pred] += 1
 
@@ -172,3 +173,57 @@ def compute_jitter(
 
     jitter_json = {f"{k[0]}_{k[1]}": v for k, v in jitter.items()}
     return jitter_json
+
+
+def compute_accuracy(samples: list[dict[str, float]]) -> dict[str, float | list[float]]:
+    """
+    Computes the accuracy (ACC) which quantifies the distance between the mean of recorded
+    gaze points and the true target location.
+
+    Args:
+        samples (list[dict[str, float]]): A list of samples with ground truth and tracker coordinates, and timestamps.
+
+    Returns:
+        dict[str, float]: A dictionary with per-point accuracy and mean accuracy.
+    """
+    groups = defaultdict(list)
+    for s in samples:
+        key = (s["gt_x"], s["gt_y"])
+        groups[key].append(s)
+
+    acc_values = []
+
+    for (gx, gy), pts in groups.items():
+        mean_x = sum(p["tracker_x"] for p in pts) / len(pts)
+        mean_y = sum(p["tracker_y"] for p in pts) / len(pts)
+
+        acc = math.sqrt((mean_x - gx) ** 2 + (mean_y - gy) ** 2)
+        acc_values.append(acc)
+
+    return {"per_point_acc": acc_values, "mean_acc": sum(acc_values) / len(acc_values)}
+
+
+def compute_rms_s2s(samples: list[dict[str, float]]) -> float:
+    """
+    Computes RMS-S2S (root mean square of sample-to-sample distances).
+    Measures precision/noise across the entire sequence.
+
+    Args:
+        samples (list[dict[str, float]]): A list of samples with ground truth and tracker coordinates, and timestamps.
+
+    Returns:
+        float: The RMS-S2S value in pixels.
+    """
+    pts = [
+        (s["tracker_x"], s["tracker_y"])
+        for s in samples
+        if s["tracker_x"] is not None and s["tracker_y"] is not None
+    ]
+
+    sq_diffs = []
+    for (x1, y1), (x2, y2) in zip(pts[:-1], pts[1:]):
+        dx = x2 - x1
+        dy = y2 - y1
+        sq_diffs.append(dx * dx + dy * dy)
+
+    return math.sqrt(sum(sq_diffs) / (len(sq_diffs)))
