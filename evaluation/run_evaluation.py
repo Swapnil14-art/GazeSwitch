@@ -144,6 +144,7 @@ def load_samples(csv_file: str) -> list[dict[str, float | None]]:
 def run_evaluation(
     tracker: BaseTracker,
     screen_size: tuple[int, int],
+    fixation_delay: float,
     hold_seconds: float,
     grid_rows: int,
     grid_cols: int,
@@ -155,6 +156,7 @@ def run_evaluation(
     Args:
         tracker (BaseTracker): The gaze tracker to evaluate.
         screen_size (tuple): The size of the screen.
+        fixation_delay (float): The delay before sampling after showing each point.
         hold_seconds (float): The duration to hold each point.
         grid_rows (int): The number of rows in the grid.
         grid_cols (int): The number of columns in the grid.
@@ -185,31 +187,33 @@ def run_evaluation(
             # Show fixation point
             show_point(hold_seconds, gx, gy, 20)
 
-            delay = 2.0
-            t_end = time.time() + hold_seconds
-            while time.time() < t_end:
-                # Only sample after delay. This ensures we have time to show
-                # the point, and the user has time to look at it
-                if time.time() >= t_end - (hold_seconds - delay):
-                    ts_before = time.time()
-                    data = tracker.get_data()
-                    ts_after = time.time()
-                    if data:
-                        gaze = data.get("gaze", None)
-                        tx = gaze["x"] if gaze else None
-                        ty = gaze["y"] if gaze else None
+            # Short delay before sampling to allow user to fixate
+            time.sleep(args.fixation_delay)
 
-                        # Some trackers provide timestamps for each sample, so we
-                        # can compute latency more accurately
-                        gaze_timestamp = data.get("timestamp", None)
-                        latency = (
-                            gaze_timestamp - ts_before
-                            if gaze_timestamp
-                            else ts_after - ts_before
-                        )
+            end_time = time.time() + (hold_seconds - args.fixation_delay)
 
-                        writer.writerow([gx, gy, tx, ty, ts_after, latency])
-                time.sleep(1.0 / 17.0)
+            while time.time() < end_time:
+                ts_before = time.time()
+                data = tracker.get_data()
+                ts_after = time.time()
+
+                if data:
+                    gaze = data.get("gaze", None)
+                    tx = gaze["x"] if gaze else None
+                    ty = gaze["y"] if gaze else None
+
+                    # Some trackers provide timestamps for each sample, so we
+                    # can compute latency more accurately
+                    gaze_timestamp = data.get("timestamp", None)
+                    latency = (
+                        gaze_timestamp - ts_before
+                        if gaze_timestamp
+                        else ts_after - ts_before
+                    )
+
+                    writer.writerow([gx, gy, tx, ty, ts_after, latency])
+
+                time.sleep(1.0 / 17.0)  # Sample at ~17 Hz
 
     EVAL_UI_ROOT.destroy()  # type: ignore
     print(f"Evaluation data saved to {outfile}")
@@ -261,6 +265,7 @@ if __name__ == "__main__":
     parser.add_argument("--calibration-mode", type=str, default="with_glasses")
     parser.add_argument("--screen-w", type=int, default=screen_width)
     parser.add_argument("--screen-h", type=int, default=screen_height)
+    parser.add_argument("--fixation-delay", type=float, default=1.0)
     parser.add_argument("--hold-seconds", type=float, default=4.0)
     parser.add_argument("--grid-rows", type=int, default=3)
     parser.add_argument("--grid-cols", type=int, default=3)
@@ -280,6 +285,7 @@ if __name__ == "__main__":
         run_evaluation(
             tracker,
             screen_size=(args.screen_w, args.screen_h),
+            fixation_delay=args.fixation_delay,
             hold_seconds=args.hold_seconds,
             grid_rows=args.grid_rows,
             grid_cols=args.grid_cols,
