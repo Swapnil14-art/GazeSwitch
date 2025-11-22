@@ -72,7 +72,9 @@ def compute_zone_accuracy(
     return (correct / total * 100) if total > 0 else None
 
 
-def compute_confusion_matrix(samples, screen_size, rows, cols):
+def compute_confusion_matrix(
+    samples: list[dict[str, float]], screen_size: tuple[int, int], rows: int, cols: int
+):
     """
     Computes the confusion matrix for zone predictions.
 

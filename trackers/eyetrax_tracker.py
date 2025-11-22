@@ -19,7 +19,7 @@ class EyeTraxWrapper(BaseTracker):
         self.cap = cv2.VideoCapture(0)
 
     def get_data(self) -> dict[str, Any]:
-        ret, frame = self.cap.read()
+        _, frame = self.cap.read()
         features, blink = self.tracker.extract_features(frame)
         x, y = (
             self.tracker.predict([features])[0]
