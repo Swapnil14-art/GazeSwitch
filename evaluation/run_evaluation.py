@@ -146,6 +146,7 @@ def run_evaluation(
     screen_size: tuple[int, int],
     fixation_delay: float,
     hold_seconds: float,
+    sampling_rate: float,
     grid_rows: int,
     grid_cols: int,
     args,
@@ -158,6 +159,7 @@ def run_evaluation(
         screen_size (tuple): The size of the screen.
         fixation_delay (float): The delay before sampling after showing each point.
         hold_seconds (float): The duration to hold each point.
+        sampling_rate (float): The rate at which to sample gaze data.
         grid_rows (int): The number of rows in the grid.
         grid_cols (int): The number of columns in the grid.
         args: The command-line arguments.
@@ -206,7 +208,7 @@ def run_evaluation(
 
                     writer.writerow([gx, gy, tx, ty, gaze_timestamp, latency])
 
-                time.sleep(1.0 / 17.0)  # Sample at ~17 Hz
+                time.sleep(1.0 / sampling_rate)
 
     EVAL_UI_ROOT.destroy()  # type: ignore
     print(f"Evaluation data saved to {outfile}")
@@ -260,6 +262,7 @@ if __name__ == "__main__":
     parser.add_argument("--screen-h", type=int, default=screen_height)
     parser.add_argument("--fixation-delay", type=float, default=1.0)
     parser.add_argument("--hold-seconds", type=float, default=4.0)
+    parser.add_argument("--sampling-rate", type=float, default=17.0)
     parser.add_argument("--grid-rows", type=int, default=3)
     parser.add_argument("--grid-cols", type=int, default=3)
     args = parser.parse_args()
@@ -280,6 +283,7 @@ if __name__ == "__main__":
             screen_size=(args.screen_w, args.screen_h),
             fixation_delay=args.fixation_delay,
             hold_seconds=args.hold_seconds,
+            sampling_rate=args.sampling_rate,
             grid_rows=args.grid_rows,
             grid_cols=args.grid_cols,
             args=args,
