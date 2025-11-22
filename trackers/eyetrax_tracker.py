@@ -1,3 +1,4 @@
+import time
 from typing import Any
 
 import cv2
@@ -27,9 +28,7 @@ class EyeTraxWrapper(BaseTracker):
             else (None, None)
         )
 
-        result = {
-            "gaze": {"x": x, "y": y},
-        }
+        result = {"gaze": {"x": x, "y": y}, "timestamp": time.time()}
 
         return result
 

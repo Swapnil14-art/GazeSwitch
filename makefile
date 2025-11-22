@@ -1,4 +1,4 @@
-SRC = trackers evaluation
+SRC = trackers evaluation tests
 
 .PHONY: all format lint check run-eval test_metrics
 
@@ -14,9 +14,9 @@ lint:
 	@echo Linting source files...
 	@flake8 $(SRC)
 
-test_metrics:
+test:
 	@echo Running tests...
-	@pytest evaluation/test_metrics.py
+	@python -m pytest -p no:warnings tests/
 
 run-eval:
 	@echo Running evaluation...

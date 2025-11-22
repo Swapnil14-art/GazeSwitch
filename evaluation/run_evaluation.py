@@ -188,30 +188,23 @@ def run_evaluation(
             show_point(hold_seconds, gx, gy, 20)
 
             # Short delay before sampling to allow user to fixate
-            time.sleep(args.fixation_delay)
+            time.sleep(fixation_delay)
 
-            end_time = time.time() + (hold_seconds - args.fixation_delay)
+            end_time = time.time() + (hold_seconds - fixation_delay)
 
             while time.time() < end_time:
                 ts_before = time.time()
                 data = tracker.get_data()
-                ts_after = time.time()
 
                 if data:
                     gaze = data.get("gaze", None)
                     tx = gaze["x"] if gaze else None
                     ty = gaze["y"] if gaze else None
 
-                    # Some trackers provide timestamps for each sample, so we
-                    # can compute latency more accurately
                     gaze_timestamp = data.get("timestamp", None)
-                    latency = (
-                        gaze_timestamp - ts_before
-                        if gaze_timestamp
-                        else ts_after - ts_before
-                    )
+                    latency = gaze_timestamp - ts_before if gaze_timestamp else None
 
-                    writer.writerow([gx, gy, tx, ty, ts_after, latency])
+                    writer.writerow([gx, gy, tx, ty, gaze_timestamp, latency])
 
                 time.sleep(1.0 / 17.0)  # Sample at ~17 Hz
 

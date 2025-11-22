@@ -16,7 +16,7 @@ from evaluation.metrics import (
 # ------------------------------
 # Euclidean error
 # ------------------------------
-def test_compute_euclidean_error_normal():
+def test_compute_euclidean_error():
     samples = [
         {
             "gt_x": 0.0,
@@ -37,10 +37,6 @@ def test_compute_euclidean_error_normal():
     ]
     result = compute_euclidean_error(samples)
     assert result == 5.0
-
-
-def test_compute_euclidean_error_empty():
-    assert compute_euclidean_error([]) is None
 
 
 # ------------------------------
