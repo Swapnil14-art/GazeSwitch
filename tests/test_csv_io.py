@@ -22,6 +22,7 @@ def test_csv_io(tmp_path):
             "latency": 0.02,
         },
     ]
+
     csv_file = tmp_path / "test.csv"
 
     with open(csv_file, "w", newline="") as f:
@@ -30,6 +31,9 @@ def test_csv_io(tmp_path):
         writer.writerows(samples)
 
     loaded = load_samples(csv_file)
+
+    assert len(loaded) == len(samples)
+
     for s_orig, s_loaded in zip(samples, loaded):
-        assert s_orig["gt_x"] == s_loaded["gt_x"]
-        assert s_orig["tracker_x"] == s_loaded["tracker_x"]
+        for key in s_orig:
+            assert s_orig[key] == s_loaded[key]

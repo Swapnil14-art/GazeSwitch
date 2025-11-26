@@ -95,6 +95,7 @@ def test_compute_confusion_matrix():
 def test_compute_latency():
     samples = [{"latency": 0.01}, {"latency": 0.02}, {"latency": 0.03}]
     result = compute_latency(samples)
+    assert result is not None
     assert math.isclose(result["mean_ms"], 20.0)
     assert math.isclose(result["median_ms"], 20.0)
     assert math.isclose(result["p95_ms"], 30.0)
@@ -123,9 +124,25 @@ def test_compute_jitter():
     ]
     result = compute_jitter(samples)
     key = "0.0_0.0"
+    assert result is not None
     assert key in result
     assert "std_x" in result[key]
     assert "std_y" in result[key]
+
+
+def test_jitter_groups_correctly():
+    samples = [
+        {"gt_x": 100.0, "gt_y": 100.0, "tracker_x": 10.0, "tracker_y": 10.0},
+        {"gt_x": 100.0, "gt_y": 100.0, "tracker_x": 12.0, "tracker_y": 9.0},
+        {"gt_x": 200.0, "gt_y": 200.0, "tracker_x": 30.0, "tracker_y": 30.0},
+    ]
+
+    jitter = compute_jitter(samples)
+    assert jitter is not None
+    assert len(jitter) == 2
+
+    assert any("100" in key for key in jitter.keys())
+    assert any("200" in key for key in jitter.keys())
 
 
 # ------------------------------
@@ -137,6 +154,7 @@ def test_compute_accuracy():
         {"gt_x": 0.0, "gt_y": 0.0, "tracker_x": 2.0, "tracker_y": 2.0},
     ]
     result = compute_accuracy(samples)
+    assert result is not None
     mean_acc = result["mean_acc"]
     expected = math.sqrt(((1.5 - 0) ** 2 + (1.5 - 0) ** 2))
     assert mean_acc == expected
@@ -151,4 +169,78 @@ def test_compute_rms_s2s():
         {"tracker_x": 3.0, "tracker_y": 4.0},
     ]
     result = compute_rms_s2s(samples)
+    assert result is not None
     assert math.isclose(result, 5.0)
+
+
+# ------------------------------
+# Edge Cases
+# ------------------------------
+def test_empty_samples():
+    samples = []
+
+    assert compute_accuracy(samples) is None
+    assert compute_euclidean_error(samples) is None
+    assert compute_rms_s2s(samples) is None
+    assert compute_latency(samples) is None
+    assert compute_zone_accuracy(samples, (1000, 1000), 3, 3) is None
+    assert compute_jitter(samples) == None
+    assert compute_validity(samples) == 0.0
+
+
+def test_all_missing_tracker_data():
+    samples = [
+        {
+            "gt_x": 100,
+            "gt_y": 100,
+            "tracker_x": None,
+            "tracker_y": None,
+            "timestamp": 1.0,
+            "latency": 0.1,
+        },
+        {
+            "gt_x": 200,
+            "gt_y": 200,
+            "tracker_x": None,
+            "tracker_y": None,
+            "timestamp": 2.0,
+            "latency": 0.1,
+        },
+    ]
+
+    assert compute_validity(samples) == 0.0
+    assert compute_accuracy(samples) is None
+    assert compute_euclidean_error(samples) is None
+    assert compute_rms_s2s(samples) is None
+    assert compute_jitter(samples) is None
+
+
+def test_weird_values_negative_and_out_of_bounds():
+    samples = [
+        {
+            "gt_x": 100,
+            "gt_y": 100,
+            "tracker_x": -50.0,
+            "tracker_y": 2000.0,
+            "timestamp": 1.0,
+            "latency": 0.2,
+        },
+        {
+            "gt_x": 100,
+            "gt_y": 100,
+            "tracker_x": -60.0,
+            "tracker_y": 2100.0,
+            "timestamp": 2.0,
+            "latency": 0.3,
+        },
+    ]
+
+    err = compute_euclidean_error(samples)
+    assert err is not None
+    assert err > 0
+
+    jitter = compute_jitter(samples)
+    assert jitter is not None
+    assert len(jitter) == 1
+    key = list(jitter.keys())[0]
+    assert "100" in key

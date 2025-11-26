@@ -10,9 +10,13 @@ def compute_euclidean_error(samples: list[dict[str, float]]) -> float | None:
     Args:
         samples (list[dict[str, float]]): A list of samples with ground truth and tracker coordinates, and timestamps.
     """
+    if not samples:
+        return None
+
     errors = [
         math.sqrt((s["tracker_x"] - s["gt_x"]) ** 2 + (s["tracker_y"] - s["gt_y"]) ** 2)
         for s in samples
+        if s["tracker_x"] is not None and s["tracker_y"] is not None
     ]
 
     return sum(errors) / len(errors) if errors else None
@@ -48,6 +52,9 @@ def compute_zone_accuracy(
         rows (int): The number of rows in the grid.
         cols (int): The number of columns in the grid.
     """
+    if not samples:
+        return None
+
     screen_w, screen_h = screen_size
     zone_width = screen_w // cols
     zone_height = screen_h // rows
@@ -74,7 +81,7 @@ def compute_zone_accuracy(
 
 def compute_confusion_matrix(
     samples: list[dict[str, float]], screen_size: tuple[int, int], rows: int, cols: int
-):
+) -> list[list[int]]:
     """
     Computes the confusion matrix for zone predictions.
 
@@ -87,6 +94,9 @@ def compute_confusion_matrix(
     Returns:
         list[list[int]]: The confusion matrix as a 2D list.
     """
+    if not samples:
+        return []
+
     screen_w, screen_h = screen_size
     zone_width = screen_w // cols
     zone_height = screen_h // rows
@@ -109,7 +119,7 @@ def compute_confusion_matrix(
     return matrix
 
 
-def compute_latency(samples: list[dict[str, float]]) -> dict[str, float]:
+def compute_latency(samples: list[dict[str, float]]) -> dict[str, float] | None:
     """
     Computes latency from the evaluation samples.
 
@@ -119,13 +129,20 @@ def compute_latency(samples: list[dict[str, float]]) -> dict[str, float]:
     Returns:
         dict[str, float]: A dictionary with mean, median, and 95th percentile latency in milliseconds.
     """
+    if not samples:
+        return None
+
     latencies = [s["latency"] for s in samples]
 
-    return {
-        "mean_ms": 1000 * sum(latencies) / len(latencies),
-        "median_ms": 1000 * sorted(latencies)[len(latencies) // 2],
-        "p95_ms": 1000 * sorted(latencies)[int(len(latencies) * 0.95)],
-    }
+    return (
+        {
+            "mean_ms": 1000 * sum(latencies) / len(latencies),
+            "median_ms": 1000 * sorted(latencies)[len(latencies) // 2],
+            "p95_ms": 1000 * sorted(latencies)[int(len(latencies) * 0.95)],
+        }
+        if latencies
+        else None
+    )
 
 
 def compute_validity(samples: list[dict[str, float | None]]) -> float:
@@ -142,12 +159,12 @@ def compute_validity(samples: list[dict[str, float | None]]) -> float:
         s for s in samples if s["tracker_x"] is not None and s["tracker_y"] is not None
     ]
 
-    return len(valid) / len(samples)
+    return len(valid) / len(samples) if samples else 0.0
 
 
 def compute_jitter(
     samples: list[dict[str, float]],
-) -> dict[str, dict[str, float]]:
+) -> dict[str, dict[str, float]] | None:
     """
     Computes the jitter (standard deviation) of tracker points grouped by ground truth points.
 
@@ -157,7 +174,6 @@ def compute_jitter(
     Returns:
         dict[str, dict[str, float]]: A dictionary mapping ground truth points to their jitter statistics.
     """
-
     jitter = {}
 
     groups = {}
@@ -166,18 +182,22 @@ def compute_jitter(
         groups.setdefault(key, []).append(s)
 
     for key, group in groups.items():
-        xs = [g["tracker_x"] for g in group]
-        ys = [g["tracker_y"] for g in group]
-        jitter[key] = {
-            "std_x": statistics.pstdev(xs),
-            "std_y": statistics.pstdev(ys),
-        }
+        xs = [g["tracker_x"] for g in group if g["tracker_x"] is not None]
+        ys = [g["tracker_y"] for g in group if g["tracker_y"] is not None]
+
+        if xs and ys:
+            jitter[key] = {
+                "std_x": statistics.pstdev(xs),
+                "std_y": statistics.pstdev(ys),
+            }
 
     jitter_json = {f"{k[0]}_{k[1]}": v for k, v in jitter.items()}
-    return jitter_json
+    return jitter_json if jitter_json else None
 
 
-def compute_accuracy(samples: list[dict[str, float]]) -> dict[str, float | list[float]]:
+def compute_accuracy(
+    samples: list[dict[str, float]],
+) -> dict[str, float | list[float]] | None:
     """
     Computes the accuracy (ACC) which quantifies the distance between the mean of recorded
     gaze points and the true target location.
@@ -188,24 +208,38 @@ def compute_accuracy(samples: list[dict[str, float]]) -> dict[str, float | list[
     Returns:
         dict[str, float]: A dictionary with per-point accuracy and mean accuracy.
     """
+    if not samples:
+        return None
+
     groups = defaultdict(list)
     for s in samples:
-        key = (s["gt_x"], s["gt_y"])
-        groups[key].append(s)
+        gx, gy = s.get("gt_x"), s.get("gt_y")
+        tx, ty = s.get("tracker_x"), s.get("tracker_y")
+
+        if tx is None or ty is None:
+            continue
+
+        groups[(gx, gy)].append((tx, ty))
 
     acc_values = []
 
     for (gx, gy), pts in groups.items():
-        mean_x = sum(p["tracker_x"] for p in pts) / len(pts)
-        mean_y = sum(p["tracker_y"] for p in pts) / len(pts)
+        if not pts:
+            continue
+
+        mean_x = sum(p[0] for p in pts) / len(pts)
+        mean_y = sum(p[1] for p in pts) / len(pts)
 
         acc = math.sqrt((mean_x - gx) ** 2 + (mean_y - gy) ** 2)
         acc_values.append(acc)
 
+    if not acc_values:
+        return None
+
     return {"per_point_acc": acc_values, "mean_acc": sum(acc_values) / len(acc_values)}
 
 
-def compute_rms_s2s(samples: list[dict[str, float]]) -> float:
+def compute_rms_s2s(samples: list[dict[str, float]]) -> float | None:
     """
     Computes RMS-S2S (root mean square of sample-to-sample distances).
     Measures precision/noise across the entire sequence.
@@ -216,6 +250,9 @@ def compute_rms_s2s(samples: list[dict[str, float]]) -> float:
     Returns:
         float: The RMS-S2S value in pixels.
     """
+    if not samples:
+        return None
+
     pts = [
         (s["tracker_x"], s["tracker_y"])
         for s in samples
@@ -228,4 +265,4 @@ def compute_rms_s2s(samples: list[dict[str, float]]) -> float:
         dy = y2 - y1
         sq_diffs.append(dx * dx + dy * dy)
 
-    return math.sqrt(sum(sq_diffs) / (len(sq_diffs)))
+    return math.sqrt(sum(sq_diffs) / (len(sq_diffs))) if sq_diffs else None
