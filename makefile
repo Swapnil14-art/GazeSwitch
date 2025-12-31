@@ -23,3 +23,7 @@ run-eval:
 	@python -m evaluation.run_evaluation $(ARGS)
 
 check: format lint
+
+build:
+	@echo Building exe...
+	@pyinstaller --clean --noconsole --onefile --name GazeControl main.py
