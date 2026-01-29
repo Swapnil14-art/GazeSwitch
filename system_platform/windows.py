@@ -2,7 +2,7 @@ import win32api
 import win32com.client
 import win32gui
 
-from .window_manager import WindowManager
+from system_platform.window_manager import WindowManager
 
 
 class WindowsWindowManager(WindowManager):
