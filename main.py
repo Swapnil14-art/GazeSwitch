@@ -1,5 +1,6 @@
 import time
 from threading import Thread
+from pynput import keyboard
 import win32com.client
 import win32gui
 import win32api
@@ -9,8 +10,11 @@ import pystray
 from pystray import MenuItem as item
 from PIL import Image
 
-DWELL_TIME = 1.0  # seconds to dwell before switching focus
+DWELL_TIME = 0.8 # seconds
+TYPING_IDLE_TIME = 1.0 # seconds
+POLL_INTERVAL = 0.05 # seconds
 
+last_keystroke_time = time.time()
 current_window = None
 estimator = None
 running = False
@@ -19,6 +23,15 @@ windows_to_exclude = ["Windows Input Experience", "Rainmeter", "Program Manager"
 
 screen_width = win32api.GetSystemMetrics(0)
 screen_height = win32api.GetSystemMetrics(1)
+
+last_keystroke_time = time.time()
+
+def on_key_press(_):
+    global last_keystroke_time
+    last_keystroke_time = time.time()
+
+keyboard_listener = keyboard.Listener(on_press=on_key_press)
+keyboard_listener.start()
 
 
 def get_windows() -> list[dict]:
@@ -79,15 +92,28 @@ def run_tracker() -> None:
     Main loop to track gaze and focus windows accordingly.
     """
     global current_window, running, estimator, screen_width, screen_height
-    last_target = None
-    last_target_time = 0.0
+    
+    last_target_hwnd = None
+    gaze_dwell_start = 0.0
+    intent_idle_since = 0.0
 
     while running:
+        now = time.time()
+
+        # Get gaze data
         data = estimator.get_data()  # type: ignore
         x = data["gaze"]["x"]
         y = data["gaze"]["y"]
 
-        if x and y and 0 < x < screen_width and 0 < y < screen_height:
+        # Determine if the user is actively typing or ot
+        typing_idle = (now - last_keystroke_time) >= TYPING_IDLE_TIME
+
+        if not typing_idle:
+            intent_idle_since = 0.0
+        elif intent_idle_since == 0.0:
+            intent_idle_since = now    
+
+        if x is not None and y is not None and 0 < x < screen_width and 0 < y < screen_height:
             print(f"Predicted gaze at: ({x}, {y})")
             windows = [
                 w for w in get_windows()
@@ -96,24 +122,40 @@ def run_tracker() -> None:
 
             target_window = window_at_point(int(x), int(y), windows)
 
-            now = time.time()
             if target_window:
+                target_window_hwnd = target_window["hwnd"]
+
                 # Reset dwell timer if target changes
-                if last_target != target_window["hwnd"]:
-                    last_target = target_window["hwnd"]
-                    last_target_time = now
+                if last_target_hwnd != target_window_hwnd:
+                    last_target_hwnd = target_window["hwnd"]
+                    gaze_dwell_start = now
                 
-                # Check if dwell time has been exceeded
-                elif now - last_target_time >= DWELL_TIME:
-                    if not current_window or target_window["hwnd"] != current_window["hwnd"]:
+                # Check intent conditions
+                gaze_dwell = now - gaze_dwell_start
+                intent_idle = now - intent_idle_since if intent_idle_since > 0.0 else 0.0
+                
+                if (
+                    gaze_dwell >= DWELL_TIME
+                    and intent_idle >= TYPING_IDLE_TIME
+                ):
+                    if not current_window or target_window_hwnd != current_window["hwnd"]:
                         print(f"Focusing window: {target_window["title"]}")
                         current_window = target_window
-                        focus_window(current_window["hwnd"])
-            else:
-                last_target = None
-                last_target_time = 0.0
+                        focus_window(target_window_hwnd)
 
-        time.sleep(0.1)
+                        # Reset to prevent immediate re-trigger
+                        gaze_dwell_start = now
+                        intent_idle_since = now
+            else:
+                # No window detected, reset gaze dwell
+                last_target_hwnd = None
+                gaze_dwell_start = 0.0
+        else:
+            # Invalid gaze, reset gaze dwell
+            last_target_hwnd = None
+            gaze_dwell_start = 0.0
+
+        time.sleep(POLL_INTERVAL)
 
 
 def start_tracking(icon=None, _=None) -> None:
