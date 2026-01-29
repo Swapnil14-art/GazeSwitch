@@ -17,7 +17,7 @@ class EyeTraxWrapper(BaseTracker):
         else:
             self.tracker.load_model(f"models/eyetrax/gaze_model_{calibration_mode}.pkl")
 
-        self.cap = cv2.VideoCapture(0)
+        self.cap = cv2.VideoCapture(1)
 
     def get_data(self) -> dict[str, Any]:
         _, frame = self.cap.read()

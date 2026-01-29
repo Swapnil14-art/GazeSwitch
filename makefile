@@ -1,4 +1,4 @@
-SRC = trackers evaluation tests
+SRC = trackers evaluation tests core system_platform ui main.py 
 
 .PHONY: all format lint check run-eval test_metrics
 
