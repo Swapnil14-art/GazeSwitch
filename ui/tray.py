@@ -1,3 +1,5 @@
+import os
+import sys
 from functools import partial
 
 import pystray
@@ -7,11 +9,25 @@ from pystray import MenuItem as item
 from core.tracker import GazeTracker
 
 
+def resource_path(relative_path: str) -> str:
+    """
+    Get absolute path to a resource, works in dev and PyInstaller onefile.
+    """
+    if getattr(sys, "frozen", False):
+        # PyInstaller unpacks files to _MEIPASS
+        base_path = getattr(sys, "_MEIPASS")
+    else:
+        # Normal Python dev environment
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+
 def create_tray_icon(tracker: GazeTracker) -> None:
     """
     Create and run the system tray icon with menu options.
     """
-    image = Image.open("media/icon.png")
+    icon_path = resource_path("media/icon.png")
+    image = Image.open(icon_path)
 
     menu = (
         item("Start Tracking", tracker.start_tracking),

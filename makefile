@@ -35,5 +35,6 @@ build:
 	--hidden-import=eyetrax.calibration \
 	--collect-data mediapipe \
 	--collect-submodules eyetrax \
+	--add-data "media/icon.png;media" \
 	--name GazeControl \
 	main.py
