@@ -1,3 +1,4 @@
+import os
 import time
 from typing import Any
 
@@ -17,12 +18,13 @@ class EyeTraxWrapper(BaseTracker):
     ):
         self.tracker = GazeEstimator()
         model_suffix = f"_{calibration_mode}" if calibration_mode else ""
+        model_path = f"{model_dir}/gaze_model{model_suffix}.pkl"
 
-        if calibrate:
+        if calibrate or not os.path.exists(model_path):
             run_9_point_calibration(self.tracker, 1)
-            self.tracker.save_model(f"{model_dir}/gaze_model{model_suffix}.pkl")
+            self.tracker.save_model(model_path)
         else:
-            self.tracker.load_model(f"{model_dir}/gaze_model{model_suffix}.pkl")
+            self.tracker.load_model(model_path)
 
         self.cap = cv2.VideoCapture(1)
 

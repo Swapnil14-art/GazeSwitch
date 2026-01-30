@@ -18,14 +18,30 @@ class GazeTracker:
         self.current_window = None
         self.estimator = None
         self.last_keystroke_time = time.time()
+        self.manual_override_triggered = False
 
         self.screen_width, self.screen_height = self.wm.get_screen_size()
 
+        # Keyboard listener for typing detection
         self.keyboard_listener = keyboard.Listener(on_press=self._on_key_press)
         self.keyboard_listener.start()
 
+        # Manual override hotkey listener
+        self.hotkey_listener = keyboard.GlobalHotKeys(
+            {"<ctrl>+<shift>+<alt>+f": self._manual_override}
+        )
+        self.hotkey_listener.start()
+
     def _on_key_press(self, _):
         self.last_keystroke_time = time.time()
+
+    def _manual_override(self):
+        """
+        Triggers an immediate focus on the current gaze target,
+        bypassing dwell/idle checks.
+        """
+        self.manual_override_triggered = True
+        print("Manual override triggered")
 
     def calibrate(self, icon=None, _=None):
         """
@@ -138,7 +154,7 @@ class GazeTracker:
                         now - intent_idle_since if intent_idle_since > 0.0 else 0.0
                     )
 
-                    if (
+                    if self.manual_override_triggered or (
                         gaze_dwell >= DWELL_TIME
                         and intent_idle >= TYPING_IDLE_TIME
                         and (
@@ -153,6 +169,7 @@ class GazeTracker:
                         # Reset to prevent immediate re-trigger
                         gaze_dwell_start = now
                         intent_idle_since = now
+                        self.manual_override_triggered = False
                 else:
                     # No window detected, reset gaze dwell
                     last_target = None
