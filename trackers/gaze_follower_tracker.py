@@ -27,16 +27,20 @@ class GazeFollowerWrapper(BaseTracker):
     def get_data(self) -> dict[str, Any]:
         """
         get_gaze_info() returns a GazeInfo object with attributes:
-            - features: The features extracted from the gaze estimation model.
-            - raw_gaze_coordinates: The x, y coordinates of the gaze point from the gaze estimation model.
-            - calibrated_gaze_coordinates: The x, y coordinates of the gaze point from the calibration model.
-            - filtered_gaze_coordinates: The x, y coordinates of the gaze point from the filter.
-            - left_openness: The openness of the left eye.
-            - right_openness: The openness of the right eye.
-            - event: The type of eye movement event (default is EyeMovementEvent.UNKNOWN).
-            - status: Indicates whether the gaze estimation was successful (default is False).
-            - tracking_state: The current state of gaze tracking (default is TrackingState.FACE_MISSING).
-            - timestamp: The timestamp when the gaze information was recorded (default is 0).
+        - features: The features extracted from the gaze estimation model.
+        - raw_gaze_coordinates: The x, y coordinates of the gaze point from the gaze
+        estimation model.
+        - calibrated_gaze_coordinates: The x, y coordinates of the gaze point from the
+        calibration model.
+        - filtered_gaze_coordinates: The x, y coordinates of the gaze point from
+        the filter.
+        - left_openness: The openness of the left eye.
+        - right_openness: The openness of the right eye.
+        - event: The type of eye movement event (default is EyeMovementEvent.UNKNOWN).
+        - status: Indicates whether gaze estimation was successful (default is False).
+        - tracking_state: The current state of gaze tracking
+        (default is TrackingState.FACE_MISSING).
+        - timestamp: The timestamp when gaze information was recorded (default is 0).
         """
         gaze_info = self.gaze_follower.get_gaze_info()
 

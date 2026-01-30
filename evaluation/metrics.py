@@ -8,7 +8,8 @@ def compute_euclidean_error(samples: list[dict[str, float]]) -> float | None:
     Computes the mean Euclidean error from the evaluation CSV file.
 
     Args:
-        samples (list[dict[str, float]]): A list of samples with ground truth and tracker coordinates, and timestamps.
+        samples (list[dict[str, float]]): A list of samples with ground truth and
+        tracker coordinates, and timestamps.
     """
     if not samples:
         return None
@@ -29,10 +30,12 @@ def get_zone(x: float, y: float, zones: list[tuple[int, int, int, int]]) -> int 
     Args:
         x (float): The x-coordinate of the point.
         y (float): The y-coordinate of the point.
-        zones (list[tuple[int, int, int, int]]): A list of zones defined by (x_min, x_max, y_min, y_max).
+        zones (list[tuple[int, int, int, int]]): A list of zones defined by
+        (x_min, x_max, y_min, y_max).
 
     Returns:
-        int | None: The index of the zone the point belongs to, or None if it doesn't belong to any zone.
+        int | None: The index of the zone the point belongs to, or None if it doesn't
+        belong to any zone.
     """
     for i, (x_min, x_max, y_min, y_max) in enumerate(zones):
         if x_min <= x < x_max and y_min <= y < y_max:
@@ -47,7 +50,8 @@ def compute_zone_accuracy(
     Computes the zone accuracy from the evaluation CSV file.
 
     Args:
-        samples (list[dict[str, float]]): A list of samples with ground truth and tracker coordinates, and timestamps.
+        samples (list[dict[str, float]]): A list of samples with ground truth and
+        tracker coordinates, and timestamps.
         screen_size (tuple): The size of the screen (width, height).
         rows (int): The number of rows in the grid.
         cols (int): The number of columns in the grid.
@@ -86,7 +90,8 @@ def compute_confusion_matrix(
     Computes the confusion matrix for zone predictions.
 
     Args:
-        samples (list[dict[str, float]]): A list of samples with ground truth and tracker coordinates, and timestamps.
+        samples (list[dict[str, float]]): A list of samples with ground truth and
+        tracker coordinates, and timestamps.
         screen_size (tuple[int, int]): The size of the screen.
         rows (int): The number of rows in the grid.
         cols (int): The number of columns in the grid.
@@ -124,10 +129,12 @@ def compute_latency(samples: list[dict[str, float]]) -> dict[str, float] | None:
     Computes latency from the evaluation samples.
 
     Args:
-        samples (list[dict[str, float]]): A list of samples with ground truth and tracker coordinates, and timestamps.
+        samples (list[dict[str, float]]): A list of samples with ground truth and
+        tracker coordinates, and timestamps.
 
     Returns:
-        dict[str, float]: A dictionary with mean, median, and 95th percentile latency in milliseconds.
+        dict[str, float]: A dictionary with mean, median, and 95th percentile latency in
+        milliseconds.
     """
     if not samples:
         return None
@@ -150,7 +157,8 @@ def compute_validity(samples: list[dict[str, float | None]]) -> float:
     Computes the validity percentage of the tracker data.
 
     Args:
-        samples (list[dict[str, float | None]]): A list of samples with ground truth and tracker coordinates, and timestamps.
+        samples (list[dict[str, float | None]]): A list of samples with ground truth and
+        tracker coordinates, and timestamps.
 
     Returns:
         float: The percentage of valid tracker data.
@@ -166,13 +174,16 @@ def compute_jitter(
     samples: list[dict[str, float]],
 ) -> dict[str, dict[str, float]] | None:
     """
-    Computes the jitter (standard deviation) of tracker points grouped by ground truth points.
+    Computes the jitter (standard deviation) of tracker points grouped by ground
+    truth points.
 
     Args:
-        samples (list[dict[str, float]]): A list of samples with ground truth and tracker coordinates, and timestamps.
+        samples (list[dict[str, float]]): A list of samples with ground truth and
+        tracker coordinates, and timestamps.
 
     Returns:
-        dict[str, dict[str, float]]: A dictionary mapping ground truth points to their jitter statistics.
+        dict[str, dict[str, float]]: A dictionary mapping ground truth points to their
+        jitter statistics.
     """
     jitter = {}
 
@@ -199,11 +210,12 @@ def compute_accuracy(
     samples: list[dict[str, float]],
 ) -> dict[str, float | list[float]] | None:
     """
-    Computes the accuracy (ACC) which quantifies the distance between the mean of recorded
-    gaze points and the true target location.
+    Computes the accuracy (ACC) which quantifies the distance between the mean of
+    recorded gaze points and the true target location.
 
     Args:
-        samples (list[dict[str, float]]): A list of samples with ground truth and tracker coordinates, and timestamps.
+        samples (list[dict[str, float]]): A list of samples with ground truth and
+        tracker coordinates, and timestamps.
 
     Returns:
         dict[str, float]: A dictionary with per-point accuracy and mean accuracy.
@@ -245,7 +257,8 @@ def compute_rms_s2s(samples: list[dict[str, float]]) -> float | None:
     Measures precision/noise across the entire sequence.
 
     Args:
-        samples (list[dict[str, float]]): A list of samples with ground truth and tracker coordinates, and timestamps.
+        samples (list[dict[str, float]]): A list of samples with ground truth and
+        tracker coordinates, and timestamps.
 
     Returns:
         float: The RMS-S2S value in pixels.

@@ -184,7 +184,7 @@ def test_empty_samples():
     assert compute_rms_s2s(samples) is None
     assert compute_latency(samples) is None
     assert compute_zone_accuracy(samples, (1000, 1000), 3, 3) is None
-    assert compute_jitter(samples) == None
+    assert compute_jitter(samples) is None
     assert compute_validity(samples) == 0.0
 
 

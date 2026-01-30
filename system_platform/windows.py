@@ -13,7 +13,8 @@ class WindowsWindowManager(WindowManager):
         Get a list of all visible windows with their handles, titles, and rectangles.
 
         Returns:
-            list[dict]: A list of dictionaries containing window handles, titles, and rectangles.
+            list[dict]: A list of dictionaries containing window handles, titles,
+            and rectangles.
         """
         windows = []
 

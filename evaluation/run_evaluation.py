@@ -95,7 +95,7 @@ def save_results(outfile: str, metrics: dict[str, float | None], args, timestamp
 
     Args:
         outfile (str): The path to the CSV output file.
-        metrics (dict[str, float | None]): A dictionary of metric names and their values.
+        metrics (dict[str, float | None]): A dictionary of metrics and their values.
         args: The command-line arguments used for the evaluation.
         timestamp (str): The timestamp string for the filename.
     """
@@ -120,7 +120,8 @@ def load_samples(csv_file: str) -> list[dict[str, float | None]]:
     Args:
         csv_file (str): The path to the CSV file.
     Returns:
-        list[dict[str, float | None]]: A list of samples with ground truth and tracker coordinates.
+        list[dict[str, float | None]]: A list of samples with ground truth and
+        tracker coordinates.
     """
     samples = []
 
