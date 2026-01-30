@@ -27,6 +27,24 @@ class GazeTracker:
     def _on_key_press(self, _):
         self.last_keystroke_time = time.time()
 
+    def calibrate(self, icon=None, _=None):
+        """
+        Starts the calibration process.
+
+        This function is used as pystray menu callbacks. pystray invokes menu
+        callbacks with two arguments (icon, menu_item), even if they are not
+        needed by the implementation. The parameters are therefore accepted
+        for compatibility but intentionally unused.
+
+        Args:
+            icon (pystray.Icon | None): The system tray icon instance provided
+                by pystray when invoked from the tray menu. Optional to allow
+                manual invocation.
+            _ (pystray.MenuItem | None): The menu item that triggered the callback.
+                Unused by design.
+        """
+        self.estimator = EyeTraxWrapper(True, "with_glasses")
+
     def start_tracking(self, icon=None, _=None):
         """
         Start the gaze tracking process.

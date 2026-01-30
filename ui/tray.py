@@ -16,6 +16,7 @@ def create_tray_icon(tracker: GazeTracker) -> None:
     menu = (
         item("Start Tracking", tracker.start_tracking),
         item("Stop Tracking", tracker.stop_tracking),
+        item("Calibrate", tracker.calibrate),
         item("Exit", partial(exit_app, tracker=tracker)),
     )
 

@@ -2,10 +2,7 @@ import sys
 import warnings
 
 from core.tracker import GazeTracker
-from system_platform.linux import LinuxWindowManager
-from system_platform.macos import MacOSWindowManager
 from system_platform.window_manager import WindowManager
-from system_platform.windows import WindowsWindowManager
 from ui.tray import create_tray_icon
 
 warnings.filterwarnings("ignore", category=UserWarning, module="google.protobuf")
@@ -13,10 +10,16 @@ warnings.filterwarnings("ignore", category=UserWarning, module="google.protobuf"
 
 def create_window_manager() -> WindowManager:
     if sys.platform.startswith("win"):
+        from system_platform.windows import WindowsWindowManager
+
         return WindowsWindowManager()
     elif sys.platform == "darwin":
+        from system_platform.macos import MacOSWindowManager
+
         return MacOSWindowManager()
     else:
+        from system_platform.linux import LinuxWindowManager
+
         return LinuxWindowManager()
 
 
