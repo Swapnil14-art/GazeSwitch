@@ -3,15 +3,19 @@ from typing import Any
 from gazefollower import GazeFollower
 from gazefollower.calibration import SVRCalibration
 
+from system_platform.utils import get_model_dir
 from trackers.base_tracker import BaseTracker
 
 
 class GazeFollowerWrapper(BaseTracker):
-    def __init__(self, calibrate: bool, calibration_mode: str):
+    def __init__(
+        self,
+        calibrate: bool,
+        calibration_mode: str = "",
+        model_dir: str = get_model_dir(),
+    ):
         self.gaze_follower = GazeFollower(
-            calibration=SVRCalibration(
-                model_save_path="models/gaze_follower/" + calibration_mode
-            )
+            calibration=SVRCalibration(model_save_path=model_dir + calibration_mode)
         )
 
         if calibrate:

@@ -7,7 +7,7 @@ all: format
 format:
 	@echo Formatting source files...
 	@autoflake --remove-all-unused-imports --recursive --in-place $(SRC)
-	@isort $(SRC)
+	@isort --profile black $(SRC)
 	@black $(SRC)
 
 lint:

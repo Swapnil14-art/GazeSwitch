@@ -269,11 +269,15 @@ if __name__ == "__main__":
 
     if args.tracker == "eyetrax":
         tracker = EyeTraxWrapper(
-            calibrate=args.calibrate, calibration_mode=args.calibration_mode
+            calibrate=args.calibrate,
+            calibration_mode=args.calibration_mode,
+            model_dir="models/eyetrax",
         )
     else:
         tracker = GazeFollowerWrapper(
-            calibrate=args.calibrate, calibration_mode=args.calibration_mode
+            calibrate=args.calibrate,
+            calibration_mode=args.calibration_mode,
+            model_dir="models/gazefollower",
         )
 
     try:

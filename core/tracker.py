@@ -43,7 +43,7 @@ class GazeTracker:
             _ (pystray.MenuItem | None): The menu item that triggered the callback.
                 Unused by design.
         """
-        self.estimator = EyeTraxWrapper(True, "with_glasses")
+        self.estimator = EyeTraxWrapper(calibrate=True)
 
     def start_tracking(self, icon=None, _=None):
         """
@@ -65,7 +65,10 @@ class GazeTracker:
             return
 
         self.running = True
-        self.estimator = EyeTraxWrapper(False, "with_glasses")
+
+        if not self.estimator:
+            self.estimator = EyeTraxWrapper(calibrate=False)
+
         Thread(target=self._run_tracker, daemon=True).start()
         print("Tracking started")
 

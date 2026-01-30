@@ -4,18 +4,25 @@ from typing import Any
 import cv2
 from eyetrax import GazeEstimator, run_9_point_calibration
 
+from system_platform.utils import get_model_dir
 from trackers.base_tracker import BaseTracker
 
 
 class EyeTraxWrapper(BaseTracker):
-    def __init__(self, calibrate: bool, calibration_mode: str):
+    def __init__(
+        self,
+        calibrate: bool,
+        calibration_mode: str = "",
+        model_dir: str = get_model_dir(),
+    ):
         self.tracker = GazeEstimator()
+        model_suffix = f"_{calibration_mode}" if calibration_mode else ""
 
         if calibrate:
-            run_9_point_calibration(self.tracker)
-            self.tracker.save_model(f"models/eyetrax/gaze_model_{calibration_mode}.pkl")
+            run_9_point_calibration(self.tracker, 1)
+            self.tracker.save_model(f"{model_dir}/gaze_model{model_suffix}.pkl")
         else:
-            self.tracker.load_model(f"models/eyetrax/gaze_model_{calibration_mode}.pkl")
+            self.tracker.load_model(f"{model_dir}/gaze_model{model_suffix}.pkl")
 
         self.cap = cv2.VideoCapture(1)
 
