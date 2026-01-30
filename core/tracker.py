@@ -1,3 +1,4 @@
+import logging
 import time
 from threading import Thread
 
@@ -5,6 +6,8 @@ from pynput import keyboard
 
 from system_platform.window_manager import WindowManager
 from trackers.eyetrax_tracker import EyeTraxWrapper
+
+logger = logging.getLogger(__name__)
 
 DWELL_TIME = 0.8  # seconds
 TYPING_IDLE_TIME = 1.0  # seconds
@@ -41,7 +44,7 @@ class GazeTracker:
         bypassing dwell/idle checks.
         """
         self.manual_override_triggered = True
-        print("Manual override triggered")
+        logger.info("Manual override triggered")
 
     def calibrate(self, icon=None, _=None):
         """
@@ -86,7 +89,7 @@ class GazeTracker:
             self.estimator = EyeTraxWrapper(calibrate=False)
 
         Thread(target=self._run_tracker, daemon=True).start()
-        print("Tracking started")
+        logger.info("Tracking started")
 
     def stop_tracking(self, icon=None, _=None):
         """
@@ -107,7 +110,7 @@ class GazeTracker:
         self.running = False
         if self.estimator:
             self.estimator.stop()
-        print("Tracking stopped")
+        logger.info("Tracking stopped")
 
     def _run_tracker(self):
         """
@@ -138,7 +141,7 @@ class GazeTracker:
                 and 0 < x < self.screen_width
                 and 0 < y < self.screen_height
             ):
-                print(f"Predicted gaze at: ({x}, {y})")
+                logger.debug(f"Predicted gaze at: ({x}, {y})")
                 windows = self.wm.get_windows()
                 target_window = self.wm.window_at_point(int(x), int(y), windows)
 
@@ -162,7 +165,7 @@ class GazeTracker:
                             or target_window != self.current_window
                         )
                     ):
-                        print(f"Focusing window: {target_window}")
+                        logger.debug(f"Focusing window: {target_window}")
                         self.wm.focus_window(target_window)
                         self.current_window = target_window
 

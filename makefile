@@ -33,5 +33,7 @@ build:
 	@pyinstaller --clean --noconsole --onefile \
 	--hidden-import=eyetrax.gaze \
 	--hidden-import=eyetrax.calibration \
+	--collect-data mediapipe \
+	--collect-submodules eyetrax \
 	--name GazeControl \
 	main.py
