@@ -24,6 +24,14 @@ run-eval:
 
 check: format lint
 
+clean:
+	@rmdir /s /q build dist
+	@del /q GazeControl.spec
+
 build:
 	@echo Building exe...
-	@pyinstaller --clean --noconsole --onefile --name GazeControl main.py
+	@pyinstaller --clean --noconsole --onefile \
+	--hidden-import=eyetrax.gaze \
+	--hidden-import=eyetrax.calibration \
+	--name GazeControl \
+	main.py

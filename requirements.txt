@@ -1,0 +1,11 @@
+pynput
+opencv-python
+eyetrax
+pywin32
+pystray
+mediapipe==0.10.14
+autoflake
+isort
+black
+pyinstaller
+gazefollower
