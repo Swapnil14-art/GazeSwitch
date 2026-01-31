@@ -32,26 +32,32 @@ def create_tray_icon(tracker: GazeTracker) -> None:
     icon_path = resource_path("media/icon.png")
     image = Image.open(icon_path)
 
+    """
+    pystray invokes menu item action callbacks with two arguments (icon, item), 
+    even if they are not needed by the implementation. The parameters are therefore 
+    accepted for compatibility but intentionally unused.
+    """
     # Build dynamic submenu for video devices
     video_devices = tracker.wm.list_video_devices()
+
+    def make_video_item(idx: int, name: str):
+        def callback(icon, item):
+            tracker.set_video_device(idx)
+
+        def checked(item):
+            return tracker.current_camera == idx
+
+        return item(name, callback, checked=checked)
+
     video_menu = item(
         "Select Camera",
-        pystray.Menu(
-            *[
-                item(
-                    name,
-                    partial(tracker.set_video_device, device_index=idx),
-                    checked=lambda _, i=idx: tracker.current_camera == i,
-                )
-                for idx, name in video_devices
-            ]
-        ),
+        pystray.Menu(*[make_video_item(idx, name) for idx, name in video_devices]),
     )
 
     menu = (
-        item("Start Tracking", tracker.start_tracking),
-        item("Stop Tracking", tracker.stop_tracking),
-        item("Calibrate", tracker.calibrate),
+        item("Start Tracking", lambda icon, item: tracker.start_tracking()),
+        item("Stop Tracking", lambda icon, item: tracker.stop_tracking()),
+        item("Calibrate", lambda icon, item: tracker.calibrate()),
         video_menu,
         item("Exit", partial(exit_app, tracker=tracker)),
     )
@@ -63,19 +69,6 @@ def create_tray_icon(tracker: GazeTracker) -> None:
 def exit_app(icon, _, tracker: GazeTracker):
     """
     Exit the application by stopping tracking and the tray icon.
-
-    This function is used as pystray menu callbacks. pystray invokes menu
-    callbacks with two arguments (icon, menu_item), even if they are not
-    needed by the implementation. The parameters are therefore accepted
-    for compatibility but intentionally unused.
-
-    Args:
-        icon (pystray.Icon | None): The system tray icon instance provided
-            by pystray when invoked from the tray menu. Optional to allow
-            manual invocation.
-        _ (pystray.MenuItem | None): The menu item that triggered the callback.
-            Unused by design.
-        tracker (GazeTracker): The gaze tracker instance to stop.
     """
     tracker.stop_tracking()
     icon.stop()
