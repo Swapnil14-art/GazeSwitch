@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 from functools import partial
@@ -7,6 +8,8 @@ from PIL import Image
 from pystray import MenuItem as item
 
 from core.tracker import GazeTracker
+
+logger = logging.getLogger(__name__)
 
 
 def resource_path(relative_path: str) -> str:
@@ -29,10 +32,27 @@ def create_tray_icon(tracker: GazeTracker) -> None:
     icon_path = resource_path("media/icon.png")
     image = Image.open(icon_path)
 
+    # Build dynamic submenu for video devices
+    video_devices = tracker.wm.list_video_devices()
+    video_menu = item(
+        "Select Camera",
+        pystray.Menu(
+            *[
+                item(
+                    name,
+                    partial(tracker.set_video_device, device_index=idx),
+                    checked=lambda _, i=idx: tracker.current_camera == i,
+                )
+                for idx, name in video_devices
+            ]
+        ),
+    )
+
     menu = (
         item("Start Tracking", tracker.start_tracking),
         item("Stop Tracking", tracker.stop_tracking),
         item("Calibrate", tracker.calibrate),
+        video_menu,
         item("Exit", partial(exit_app, tracker=tracker)),
     )
 
@@ -55,6 +75,7 @@ def exit_app(icon, _, tracker: GazeTracker):
             manual invocation.
         _ (pystray.MenuItem | None): The menu item that triggered the callback.
             Unused by design.
+        tracker (GazeTracker): The gaze tracker instance to stop.
     """
     tracker.stop_tracking()
     icon.stop()

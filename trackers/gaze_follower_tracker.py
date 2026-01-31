@@ -2,6 +2,7 @@ from typing import Any
 
 from gazefollower import GazeFollower
 from gazefollower.calibration import SVRCalibration
+from gazefollower.camera import WebCamCamera
 
 from system_platform.utils import get_model_dir
 from trackers.base_tracker import BaseTracker
@@ -10,12 +11,14 @@ from trackers.base_tracker import BaseTracker
 class GazeFollowerWrapper(BaseTracker):
     def __init__(
         self,
-        calibrate: bool,
+        device_index: int = 0,
+        calibrate: bool = False,
         calibration_mode: str = "",
         model_dir: str = get_model_dir(),
     ):
         self.gaze_follower = GazeFollower(
-            calibration=SVRCalibration(model_save_path=model_dir + calibration_mode)
+            camera=WebCamCamera(webcam_id=device_index),
+            calibration=SVRCalibration(model_save_path=model_dir + calibration_mode),
         )
 
         if calibrate:
@@ -23,6 +26,9 @@ class GazeFollowerWrapper(BaseTracker):
             self.gaze_follower.calibration.save_model()
 
         self.gaze_follower.start_sampling()
+
+    def set_video_device(self, device_index: int):
+        self.gaze_follower.camera = WebCamCamera(webcam_id=device_index)
 
     def get_data(self) -> dict[str, Any]:
         """

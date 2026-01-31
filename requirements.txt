@@ -8,3 +8,4 @@ pyinstaller
 gazefollower
 pytest
 ruff
+pygrabber

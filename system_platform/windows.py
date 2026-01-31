@@ -1,6 +1,7 @@
 import win32api
 import win32com.client
 import win32gui
+from pygrabber.dshow_graph import FilterGraph
 
 from system_platform.window_manager import WindowManager
 
@@ -9,13 +10,6 @@ class WindowsWindowManager(WindowManager):
     windows_to_exclude = ["Windows Input Experience", "Rainmeter", "Program Manager"]
 
     def get_windows(self) -> list[dict]:
-        """
-        Get a list of all visible windows with their handles, titles, and rectangles.
-
-        Returns:
-            list[dict]: A list of dictionaries containing window handles, titles,
-            and rectangles.
-        """
         windows = []
 
         def callback(hwnd, _):
@@ -35,17 +29,6 @@ class WindowsWindowManager(WindowManager):
         return windows
 
     def window_at_point(self, x: int, y: int, windows: list[dict]):
-        """
-        Find the window at a given point (x, y) from a list of windows.
-
-        Args:
-            x (int): The x-coordinate of the point.
-            y (int): The y-coordinate of the point.
-            windows (list[dict]): A list of window dictionaries with "rect" keys.
-
-        Returns:
-            dict | None: The window dictionary at the given point, or None if not found.
-        """
         for w in windows:
             left, top, right, bottom = w["rect"]
             if left <= x <= right and top <= y <= bottom:
@@ -53,12 +36,6 @@ class WindowsWindowManager(WindowManager):
         return None
 
     def focus_window(self, window: dict) -> None:
-        """
-        Bring the specified window to the foreground.
-
-        Args:
-            window (dict): The window to focus.
-        """
         try:
             shell = win32com.client.Dispatch("WScript.Shell")
             shell.SendKeys("%")
@@ -66,5 +43,11 @@ class WindowsWindowManager(WindowManager):
         except Exception as e:
             print(f"Could not focus window: {e}")
 
-    def get_screen_size(self):
+    def get_screen_size(self) -> tuple[int, int]:
         return win32api.GetSystemMetrics(0), win32api.GetSystemMetrics(1)
+
+    def list_video_devices(self) -> list[tuple[int, str]]:
+        graph = FilterGraph()
+        device_names = graph.get_input_devices()
+
+        return [(idx, name) for idx, name in enumerate(device_names)]

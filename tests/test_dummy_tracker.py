@@ -2,6 +2,9 @@ from trackers.base_tracker import BaseTracker
 
 
 class DummyTracker(BaseTracker):
+    def set_video_device(self, device_index: int):
+        pass
+
     def get_data(self):
         return {"gaze": {"x": 50, "y": 100}, "timestamp": 123456.0}
 

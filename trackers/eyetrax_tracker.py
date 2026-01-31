@@ -12,7 +12,8 @@ from trackers.base_tracker import BaseTracker
 class EyeTraxWrapper(BaseTracker):
     def __init__(
         self,
-        calibrate: bool,
+        device_index: int = 0,
+        calibrate: bool = False,
         calibration_mode: str = "",
         model_dir: str = get_model_dir(),
     ):
@@ -21,12 +22,18 @@ class EyeTraxWrapper(BaseTracker):
         model_path = f"{model_dir}/gaze_model{model_suffix}.pkl"
 
         if calibrate or not os.path.exists(model_path):
-            run_9_point_calibration(self.tracker, 1)
+            run_9_point_calibration(self.tracker, device_index)
             self.tracker.save_model(model_path)
         else:
             self.tracker.load_model(model_path)
 
-        self.cap = cv2.VideoCapture(1)
+        self.cap = cv2.VideoCapture(device_index)
+
+    def set_video_device(self, device_index: int):
+        if self.cap is not None:
+            self.cap.release()
+
+        self.cap = cv2.VideoCapture(device_index)
 
     def get_data(self) -> dict[str, Any]:
         _, frame = self.cap.read()

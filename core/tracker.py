@@ -17,6 +17,7 @@ POLL_INTERVAL = 0.05  # seconds
 class GazeTracker:
     def __init__(self, window_manager: WindowManager):
         self.wm = window_manager
+        self.current_camera = 0
         self.running = False
         self.current_window = None
         self.estimator = None
@@ -46,6 +47,33 @@ class GazeTracker:
         self.manual_override_triggered = True
         logger.info("Manual override triggered")
 
+    def set_video_device(self, device_index: int):
+        """
+        Set the video device for the tracker.
+
+        This function is used as pystray menu callbacks. pystray invokes menu
+        callbacks with two arguments (icon, menu_item), even if they are not
+        needed by the implementation. The parameters are therefore accepted
+        for compatibility but intentionally unused.
+
+        Args:
+            icon (pystray.Icon | None): The system tray icon instance provided
+                by pystray when invoked from the tray menu. Optional to allow
+                manual invocation.
+            _ (pystray.MenuItem | None): The menu item that triggered the callback.
+                Unused by design.
+            device_index (int): The index of the video device to use.
+
+        """
+        if device_index == self.current_camera:
+            return
+
+        self.current_camera = device_index
+
+        if self.estimator:
+            self.estimator.set_video_device(device_index)
+        logger.info(f"Video device set to {device_index}")
+
     def calibrate(self, icon=None, _=None):
         """
         Starts the calibration process.
@@ -62,7 +90,7 @@ class GazeTracker:
             _ (pystray.MenuItem | None): The menu item that triggered the callback.
                 Unused by design.
         """
-        self.estimator = EyeTraxWrapper(calibrate=True)
+        self.estimator = EyeTraxWrapper(self.current_camera, calibrate=True)
 
     def start_tracking(self, icon=None, _=None):
         """
@@ -86,7 +114,7 @@ class GazeTracker:
         self.running = True
 
         if not self.estimator:
-            self.estimator = EyeTraxWrapper(calibrate=False)
+            self.estimator = EyeTraxWrapper(self.current_camera)
 
         Thread(target=self._run_tracker, daemon=True).start()
         logger.info("Tracking started")
