@@ -22,7 +22,6 @@ class GazeTracker:
         self.current_window = None
         self.estimator = None
         self.last_keystroke_time = time.time()
-        self.manual_override_triggered = False
 
         self.screen_width, self.screen_height = self.wm.get_screen_size()
 
@@ -30,14 +29,26 @@ class GazeTracker:
         self.keyboard_listener = keyboard.Listener(on_press=self._on_key_press)
         self.keyboard_listener.start()
 
-        # Manual override hotkey listener
-        self.hotkey_listener = keyboard.GlobalHotKeys(
-            {"<ctrl>+<shift>+<alt>+f": self._manual_override}
-        )
-        self.hotkey_listener.start()
+        # Manual override hotkey
+        self.manual_override_triggered = False
+        self.manual_override_hotkey = "<alt>+\\"
+        self.hotkey_listener = None
+        self._start_hotkey_listener()
 
     def _on_key_press(self, _):
         self.last_keystroke_time = time.time()
+
+    def _start_hotkey_listener(self):
+        """
+        Start the hotkey listener for manual override.
+        """
+        if self.hotkey_listener:
+            self.hotkey_listener.stop()
+
+        self.hotkey_listener = keyboard.GlobalHotKeys(
+            {self.manual_override_hotkey: self._manual_override}
+        )
+        self.hotkey_listener.start()
 
     def _manual_override(self):
         """
@@ -46,6 +57,17 @@ class GazeTracker:
         """
         self.manual_override_triggered = True
         logger.info("Manual override triggered")
+
+    def update_manual_override_hotkey(self, hotkey: str):
+        """
+        Update the manual override hotkey.
+
+        Args:
+            hotkey (str): The new hotkey combination.
+        """
+        self.manual_override_hotkey = hotkey
+        self._start_hotkey_listener()
+        logger.info(f"Manual override hotkey set to {hotkey}")
 
     def set_video_device(self, device_index: int):
         """
