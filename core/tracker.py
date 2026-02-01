@@ -4,6 +4,7 @@ from threading import Thread
 
 from pynput import keyboard
 
+from system_platform.config import load_config, save_config
 from system_platform.window_manager import WindowManager
 from trackers.eyetrax_tracker import EyeTraxWrapper
 
@@ -12,15 +13,23 @@ logger = logging.getLogger(__name__)
 DWELL_TIME = 0.8  # seconds
 TYPING_IDLE_TIME = 1.0  # seconds
 POLL_INTERVAL = 0.05  # seconds
+DEFAULT_MANUAL_OVERRIDE_HOTKEY = "<alt>+\\"
+DEFAULT_CAMERA_INDEX = 0
 
 
 class GazeTracker:
     def __init__(self, window_manager: WindowManager):
+        self.config = load_config()
+        camera_name = self.config.get("camera_name", "")
+
         self.wm = window_manager
-        self.current_camera = 0
+        self.estimator = None
+        self.current_camera = self.wm.list_video_devices().get(
+            camera_name, DEFAULT_CAMERA_INDEX
+        )
+
         self.running = False
         self.current_window = None
-        self.estimator = None
         self.last_keystroke_time = time.time()
 
         self.screen_width, self.screen_height = self.wm.get_screen_size()
@@ -31,7 +40,9 @@ class GazeTracker:
 
         # Manual override hotkey
         self.manual_override_triggered = False
-        self.manual_override_hotkey = "<alt>+\\"
+        self.manual_override_hotkey = self.config.get(
+            "manual_override_hotkey", DEFAULT_MANUAL_OVERRIDE_HOTKEY
+        )
         self.hotkey_listener = None
         self._start_hotkey_listener()
 
@@ -66,6 +77,9 @@ class GazeTracker:
             hotkey (str): The new hotkey combination.
         """
         self.manual_override_hotkey = hotkey
+        self.config["manual_override_hotkey"] = hotkey
+        save_config(self.config)
+
         self._start_hotkey_listener()
         logger.info(f"Manual override hotkey set to {hotkey}")
 
@@ -77,6 +91,10 @@ class GazeTracker:
             return
 
         self.current_camera = device_index
+        self.config["camera_name"] = list(self.wm.list_video_devices().keys())[
+            device_index
+        ]
+        save_config(self.config)
 
         if self.estimator:
             self.estimator.set_video_device(device_index)

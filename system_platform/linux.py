@@ -14,5 +14,5 @@ class LinuxWindowManager(WindowManager):
     def get_screen_size(self) -> tuple[int, int]:
         raise NotImplementedError("Only works on Linux")
 
-    def list_video_devices(self) -> list[tuple[int, str]]:
+    def list_video_devices(self) -> dict[str, int]:
         raise NotImplementedError("Only works on Linux")

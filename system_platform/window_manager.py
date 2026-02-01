@@ -49,12 +49,11 @@ class WindowManager(ABC):
         pass
 
     @abstractmethod
-    def list_video_devices(self) -> list[tuple[int, str]]:
+    def list_video_devices(self) -> dict[str, int]:
         """
         Returns a list of available camera indices.
 
         Returns:
-            list[tuple[int, str]]: A list of tuples containing camera
-            indices and their names.
+            dict[str, int]: A dictionary mapping camera names to their indices.
         """
         pass

@@ -46,8 +46,8 @@ class WindowsWindowManager(WindowManager):
     def get_screen_size(self) -> tuple[int, int]:
         return win32api.GetSystemMetrics(0), win32api.GetSystemMetrics(1)
 
-    def list_video_devices(self) -> list[tuple[int, str]]:
+    def list_video_devices(self) -> dict[str, int]:
         graph = FilterGraph()
         device_names = graph.get_input_devices()
 
-        return [(idx, name) for idx, name in enumerate(device_names)]
+        return {name: idx for idx, name in enumerate(device_names)}

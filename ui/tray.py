@@ -41,7 +41,7 @@ def create_tray_icon(tracker: GazeTracker) -> None:
     # Build dynamic submenu for video devices
     video_devices = tracker.wm.list_video_devices()
 
-    def make_video_item(idx: int, name: str):
+    def make_video_item(name: str, idx: int):
         def callback(icon, item):
             tracker.set_video_device(idx)
 
@@ -52,7 +52,9 @@ def create_tray_icon(tracker: GazeTracker) -> None:
 
     video_menu = item(
         "Select Camera",
-        pystray.Menu(*[make_video_item(idx, name) for idx, name in video_devices]),
+        pystray.Menu(
+            *[make_video_item(name, idx) for name, idx in list(video_devices.items())]
+        ),
     )
 
     menu = (
