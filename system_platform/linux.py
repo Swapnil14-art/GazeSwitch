@@ -16,3 +16,9 @@ class LinuxWindowManager(WindowManager):
 
     def list_video_devices(self) -> dict[str, int]:
         raise NotImplementedError("Only works on Linux")
+
+    def get_focused_window(self) -> dict | None:
+        raise NotImplementedError("Only works on Linux")
+
+    def window_key(self, window: dict) -> str:
+        raise NotImplementedError("Only works on Linux")

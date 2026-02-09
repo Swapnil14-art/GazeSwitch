@@ -57,3 +57,26 @@ class WindowManager(ABC):
             dict[str, int]: A dictionary mapping camera names to their indices.
         """
         pass
+
+    @abstractmethod
+    def get_focused_window(self) -> dict | None:
+        """
+        Returns the currently focused window.
+
+        Returns:
+            dict | None: The focused window dictionary, or None if no window is focused.
+        """
+        pass
+
+    @abstractmethod
+    def window_key(self, window: dict) -> str:
+        """
+        Returns a unique key for a given window.
+
+        Args:
+            window (dict): The window dictionary.
+
+        Returns:
+            str: A unique key representing the window.
+        """
+        pass

@@ -10,7 +10,7 @@ from trackers.eyetrax_tracker import EyeTraxWrapper
 
 logger = logging.getLogger(__name__)
 
-DWELL_TIME = 0.8  # seconds
+DWELL_TIME = 0.5  # seconds
 TYPING_IDLE_TIME = 1.0  # seconds
 POLL_INTERVAL = 0.05  # seconds
 DEFAULT_MANUAL_OVERRIDE_HOTKEY = "<alt>+\\"
@@ -68,6 +68,31 @@ class GazeTracker:
         """
         self.manual_override_triggered = True
         logger.info("Manual override triggered")
+
+    def _same_window(self, a: dict | None, b: dict | None) -> bool:
+        """
+        Check if two window dictionaries represent the same window.
+
+        Args:
+            a (dict | None): _window dictionary or None
+            b (dict | None): _window dictionary or None
+
+        Returns:
+            bool: True if the two window dictionaries represent the same window,
+            False otherwise.
+        """
+        if not a or not b:
+            return False
+        return self.wm.window_key(a) == self.wm.window_key(b)
+
+    def _sync_focused_window(self):
+        """
+        Sync the currently focused window with the tracker's state.
+        """
+        focused = self.wm.get_focused_window()
+        if focused and not self._same_window(focused, self.current_window):
+            self.current_window = focused
+            logger.debug(f"OS focus changed to: {focused.get('title')}")
 
     def update_manual_override_hotkey(self, hotkey: str):
         """
@@ -141,6 +166,9 @@ class GazeTracker:
         while self.running:
             now = time.time()
 
+            # Keep current_window in sync with OS focus
+            self._sync_focused_window()
+
             data = self.estimator.get_data()  # type: ignore
             x = data["gaze"]["x"]
             y = data["gaze"]["y"]
@@ -165,7 +193,7 @@ class GazeTracker:
 
                 if target_window:
                     # Reset dwell timer if target changes
-                    if target_window != last_target:
+                    if not self._same_window(target_window, last_target):
                         last_target = target_window
                         gaze_dwell_start = now
 
@@ -180,10 +208,12 @@ class GazeTracker:
                         and intent_idle >= TYPING_IDLE_TIME
                         and (
                             not self.current_window
-                            or target_window != self.current_window
+                            or not self._same_window(target_window, self.current_window)
                         )
                     ):
-                        logger.debug(f"Focusing window: {target_window}")
+                        logger.info(
+                            f"Focusing window via gaze: {target_window.get('title')}"
+                        )
                         self.wm.focus_window(target_window)
                         self.current_window = target_window
 

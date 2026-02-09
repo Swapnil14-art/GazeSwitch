@@ -51,3 +51,32 @@ class WindowsWindowManager(WindowManager):
         device_names = graph.get_input_devices()
 
         return {name: idx for idx, name in enumerate(device_names)}
+
+    def get_focused_window(self) -> dict | None:
+        hwnd = win32gui.GetForegroundWindow()
+        if not hwnd:
+            return None
+
+        if not win32gui.IsWindowVisible(hwnd):
+            return None
+
+        title = win32gui.GetWindowText(hwnd)
+        if not title:
+            return None
+
+        if any(excl in title for excl in self.windows_to_exclude):
+            return None
+
+        try:
+            rect = win32gui.GetWindowRect(hwnd)
+        except win32gui.error:
+            return None
+
+        return {
+            "hwnd": hwnd,
+            "title": title,
+            "rect": rect,
+        }
+
+    def window_key(self, window: dict) -> str:
+        return window["hwnd"]
