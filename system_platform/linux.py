@@ -22,3 +22,6 @@ class LinuxWindowManager(WindowManager):
 
     def window_key(self, window: dict) -> str:
         raise NotImplementedError("Only works on Linux")
+
+    def notify(self, title: str) -> None:
+        raise NotImplementedError("Only works on Linux")

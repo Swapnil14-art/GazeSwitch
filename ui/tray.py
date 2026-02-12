@@ -58,7 +58,11 @@ def create_tray_icon(tracker: GazeTracker) -> None:
     )
 
     menu = (
-        item("Start Tracking", lambda icon, item: tracker.start_tracking()),
+        item(
+            "Start Tracking",
+            lambda icon, item: start_tracking(tracker),
+            checked=lambda item: tracker.running,
+        ),
         item("Stop Tracking", lambda icon, item: tracker.stop_tracking()),
         item("Calibrate", lambda icon, item: tracker.calibrate()),
         video_menu,
@@ -71,6 +75,17 @@ def create_tray_icon(tracker: GazeTracker) -> None:
 
     icon = pystray.Icon("GazeControl", image, "Gaze Control", menu)
     icon.run()
+
+
+def start_tracking(tracker: GazeTracker):
+    """
+    Start tracking and show a notification.
+
+    Args:
+        tracker (GazeTracker): The tracker instance to start tracking on.
+    """
+    tracker.start_tracking()
+    tracker.wm.notify("Tracking Started")
 
 
 def change_manual_override_hotkey(icon, tracker: GazeTracker):

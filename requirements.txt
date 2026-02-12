@@ -9,3 +9,4 @@ gazefollower
 pytest
 ruff
 pygrabber
+winotify 

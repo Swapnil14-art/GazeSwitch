@@ -1,9 +1,15 @@
+import logging
+
 import win32api
 import win32com.client
 import win32gui
 from pygrabber.dshow_graph import FilterGraph
+from winotify import Notification, audio
 
 from system_platform.window_manager import WindowManager
+from ui.tray import resource_path
+
+logger = logging.getLogger(__name__)
 
 
 class WindowsWindowManager(WindowManager):
@@ -80,3 +86,16 @@ class WindowsWindowManager(WindowManager):
 
     def window_key(self, window: dict) -> str:
         return window["hwnd"]
+
+    def notify(self, title: str) -> None:
+        try:
+            notification = Notification(
+                app_id="GazeControl",
+                title=title,
+                duration="short",
+                icon=resource_path("media/icon.ico"),
+            )
+            notification.set_audio(audio.Default, loop=False)
+            notification.show()
+        except Exception as e:
+            logger.debug(f"Notification failed: {e}")

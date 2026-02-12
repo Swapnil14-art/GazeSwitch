@@ -22,3 +22,6 @@ class MacOSWindowManager(WindowManager):
 
     def window_key(self, window: dict) -> str:
         raise NotImplementedError("Only works on MacOS")
+
+    def notify(self, title: str) -> None:
+        raise NotImplementedError("Only works on MacOS")

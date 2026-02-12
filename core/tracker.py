@@ -138,10 +138,10 @@ class GazeTracker:
         if self.running:
             return
 
-        self.running = True
-
         if not self.estimator:
             self.estimator = EyeTraxWrapper(self.current_camera)
+
+        self.running = True
 
         Thread(target=self._run_tracker, daemon=True).start()
         logger.info("Tracking started")

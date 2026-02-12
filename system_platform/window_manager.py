@@ -80,3 +80,13 @@ class WindowManager(ABC):
             str: A unique key representing the window.
         """
         pass
+
+    @abstractmethod
+    def notify(self, title: str) -> None:
+        """
+        Show a system notification.
+
+        Args:
+            title (str): The title of the notification.
+        """
+        pass

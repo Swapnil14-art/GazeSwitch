@@ -35,5 +35,6 @@ build:
 	--collect-data mediapipe \
 	--collect-submodules eyetrax \
 	--add-data "media/icon.png;media" \
+	--icon "media/icon.ico" \
 	--name GazeControl \
 	main.py
