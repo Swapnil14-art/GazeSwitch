@@ -29,6 +29,21 @@ class WindowManager(ABC):
         pass
 
     @abstractmethod
+    def windows_at_point(self, x: int, y: int, windows: list[dict]) -> list[dict]:
+        """
+        Find all windows at a given point (x, y) from a list of windows.
+
+        Args:
+            x (int): The x-coordinate of the point.
+            y (int): The y-coordinate of the point.
+            windows (list[dict]): A list of window dictionaries with "rect" keys.
+
+        Returns:
+            list[dict]: The list of all window dictionaries at the given point.
+        """
+        pass
+
+    @abstractmethod
     def focus_window(self, window: dict) -> None:
         """
         Bring the specified window to the foreground.

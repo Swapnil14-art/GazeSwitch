@@ -34,12 +34,18 @@ class WindowsWindowManager(WindowManager):
 
         return windows
 
-    def window_at_point(self, x: int, y: int, windows: list[dict]):
+    def _point_in_rect(self, x, y, rect):
+        left, top, right, bottom = rect
+        return left <= x <= right and top <= y <= bottom
+
+    def window_at_point(self, x: int, y: int, windows: list[dict]) -> dict | None:
         for w in windows:
-            left, top, right, bottom = w["rect"]
-            if left <= x <= right and top <= y <= bottom:
+            if self._point_in_rect(x, y, w["rect"]):
                 return w
         return None
+
+    def windows_at_point(self, x: int, y: int, windows: list[dict]) -> list[dict]:
+        return [w for w in windows if self._point_in_rect(x, y, w["rect"])]
 
     def focus_window(self, window: dict) -> None:
         try:

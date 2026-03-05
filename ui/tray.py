@@ -57,6 +57,25 @@ def create_tray_icon(tracker: GazeTracker) -> None:
         ),
     )
 
+    # Hotkey submenu
+    hotkey_menu = item(
+        "Configure Hotkeys",
+        pystray.Menu(
+            item(
+                lambda item: f"Manual Override ({tracker.manual_override_hotkey})",
+                lambda icon, item: change_hotkey(icon, tracker, "manual_override"),
+            ),
+            item(
+                lambda item: f"Cycle Forward ({tracker.cycle_windows_hotkey})",
+                lambda icon, item: change_hotkey(icon, tracker, "cycle_forward"),
+            ),
+            item(
+                lambda item: f"Cycle Reverse ({tracker.cycle_windows_reverse_hotkey})",
+                lambda icon, item: change_hotkey(icon, tracker, "cycle_reverse"),
+            ),
+        ),
+    )
+
     menu = (
         item(
             "Start Tracking",
@@ -66,10 +85,7 @@ def create_tray_icon(tracker: GazeTracker) -> None:
         item("Stop Tracking", lambda icon, item: tracker.stop_tracking()),
         item("Calibrate", lambda icon, item: tracker.calibrate()),
         video_menu,
-        item(
-            lambda item: f"Change Manual Override ({tracker.manual_override_hotkey})",
-            lambda icon, item: change_manual_override_hotkey(icon, tracker),
-        ),
+        hotkey_menu,
         item("Exit", partial(exit_app, tracker=tracker)),
     )
 
@@ -88,20 +104,26 @@ def start_tracking(tracker: GazeTracker):
     tracker.wm.notify("Tracking Started")
 
 
-def change_manual_override_hotkey(icon, tracker: GazeTracker):
+def change_hotkey(icon, tracker: GazeTracker, hotkey_type: str):
     """
-    Change the manual override hotkey by capturing a new key combination.
+    Capture and update a hotkey for a specific action.
 
     Args:
         icon (_type_): The system tray icon.
         tracker (GazeTracker): The tracker instance to update the hotkey for.
+        hotkey_type (str): The hotkey to update.
     """
-    logger.info("Press new hotkey combination for manual override...")
+    logger.info(f"Press new hotkey combination for {hotkey_type}...")
 
     def on_complete(hotkey):
-        tracker.update_manual_override_hotkey(hotkey)
+        if hotkey_type == "manual_override":
+            tracker.update_manual_override_hotkey(hotkey)
+        elif hotkey_type == "cycle_forward":
+            tracker.update_cycle_hotkey(hotkey, reverse=False)
+        elif hotkey_type == "cycle_reverse":
+            tracker.update_cycle_hotkey(hotkey, reverse=True)
         icon.update_menu()
-        logger.info(f"New shortcut: {hotkey}")
+        logger.info(f"New shortcut for {hotkey_type}: {hotkey}")
 
     capture_hotkey(on_complete)
 

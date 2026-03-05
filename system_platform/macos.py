@@ -8,6 +8,9 @@ class MacOSWindowManager(WindowManager):
     def window_at_point(self, x: int, y: int, windows: list[dict]) -> dict | None:
         raise NotImplementedError("Only works on MacOS")
 
+    def windows_at_point(self, x: int, y: int, windows: list[dict]) -> list[dict]:
+        raise NotImplementedError("Only works on MacOS")
+
     def focus_window(self, window: dict) -> None:
         raise NotImplementedError("Only works on MacOS")
 
