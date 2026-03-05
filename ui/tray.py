@@ -113,7 +113,13 @@ def change_hotkey(icon, tracker: GazeTracker, hotkey_type: str):
         tracker (GazeTracker): The tracker instance to update the hotkey for.
         hotkey_type (str): The hotkey to update.
     """
-    logger.info(f"Press new hotkey combination for {hotkey_type}...")
+    action_name = {
+        "manual_override": "Manual Override",
+        "cycle_forward": "Cycle Forward",
+        "cycle_reverse": "Cycle Reverse",
+    }[hotkey_type]
+
+    tracker.wm.notify(f"Press new hotkey for {action_name}...")
 
     def on_complete(hotkey):
         if hotkey_type == "manual_override":
@@ -124,6 +130,7 @@ def change_hotkey(icon, tracker: GazeTracker, hotkey_type: str):
             tracker.update_cycle_hotkey(hotkey, reverse=True)
         icon.update_menu()
         logger.info(f"New shortcut for {hotkey_type}: {hotkey}")
+        tracker.wm.notify(f"{action_name} hotkey set to {hotkey}")
 
     capture_hotkey(on_complete)
 
