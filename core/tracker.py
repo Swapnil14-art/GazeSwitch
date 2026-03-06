@@ -26,10 +26,13 @@ class GazeTracker:
         camera_name = self.config.get("camera_name", "")
 
         self.wm = window_manager
-        self.estimator = None
         self.current_camera = self.wm.list_video_devices().get(
             camera_name, DEFAULT_CAMERA_INDEX
         )
+
+        self.estimator = EyeTraxWrapper()
+        if self.estimator.is_ready():
+            Thread(target=self._preload_estimator, daemon=True).start()
 
         self.running = False
         self.current_window = None
@@ -70,6 +73,14 @@ class GazeTracker:
 
         self.hotkey_listener = None
         self._start_hotkey_listener()
+
+    def _preload_estimator(self):
+        try:
+            logger.info("Preloading gaze model...")
+            self.estimator.preload()
+            logger.info("Model preloaded")
+        except Exception:
+            logger.exception("Preload failed")
 
     def _on_key_press(self, _):
         self.last_keystroke_time = time.time()
@@ -266,7 +277,9 @@ class GazeTracker:
         """
         Starts the calibration process.
         """
-        self.estimator = EyeTraxWrapper(self.current_camera, calibrate=True)
+        logger.info("Starting calibration")
+        self.estimator.calibrate(self.current_camera)
+        logger.info("Calibration finished")
 
     def start_tracking(self):
         """
@@ -275,12 +288,15 @@ class GazeTracker:
         if self.running:
             return
 
-        if not self.estimator:
-            self.estimator = EyeTraxWrapper(self.current_camera)
+        if not self.estimator.is_ready():
+            self.wm.notify("Calibration required before Tracking!")
+            return
+
+        self.estimator.start(self.current_camera)
 
         self.running = True
-
         Thread(target=self._run_tracker, daemon=True).start()
+
         logger.info("Tracking started")
 
     def stop_tracking(self):

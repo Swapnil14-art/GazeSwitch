@@ -1,3 +1,4 @@
+import os
 from typing import Any
 
 from gazefollower import GazeFollower
@@ -9,26 +10,34 @@ from trackers.base_tracker import BaseTracker
 
 
 class GazeFollowerWrapper(BaseTracker):
-    def __init__(
-        self,
-        device_index: int = 0,
-        calibrate: bool = False,
-        calibration_mode: str = "",
-        model_dir: str = get_model_dir(),
-    ):
+    def __init__(self, calibration_mode: str = "", model_dir: str = get_model_dir()):
+        self.model_path = model_dir + calibration_mode
+        self.gaze_follower = None
+
+    def is_ready(self) -> bool:
+        return os.path.exists(self.model_path)
+
+    def calibrate(self, device_index: int):
         self.gaze_follower = GazeFollower(
             camera=WebCamCamera(webcam_id=device_index),
-            calibration=SVRCalibration(model_save_path=model_dir + calibration_mode),
+            calibration=SVRCalibration(model_save_path=self.model_path),
         )
 
-        if calibrate:
-            self.gaze_follower.calibrate()
-            self.gaze_follower.calibration.save_model()
+        self.gaze_follower.calibrate()
+        self.gaze_follower.calibration.save_model()
+
+    def start(self, device_index: int):
+        if self.gaze_follower is None:
+            self.gaze_follower = GazeFollower(
+                camera=WebCamCamera(webcam_id=device_index),
+                calibration=SVRCalibration(model_save_path=self.model_path),
+            )
 
         self.gaze_follower.start_sampling()
 
     def set_video_device(self, device_index: int):
-        self.gaze_follower.camera = WebCamCamera(webcam_id=device_index)
+        if self.gaze_follower:
+            self.gaze_follower.camera = WebCamCamera(webcam_id=device_index)
 
     def get_data(self) -> dict[str, Any]:
         """
@@ -48,45 +57,32 @@ class GazeFollowerWrapper(BaseTracker):
         (default is TrackingState.FACE_MISSING).
         - timestamp: The timestamp when gaze information was recorded (default is 0).
         """
-        gaze_info = self.gaze_follower.get_gaze_info()
+        if self.gaze_follower:
+            gaze_info = self.gaze_follower.get_gaze_info()
 
-        if gaze_info:
-            result = {
-                "gaze": {
-                    "x": (
-                        gaze_info.calibrated_gaze_coordinates[0]
-                        if gaze_info.calibrated_gaze_coordinates is not None
-                        else None
-                    ),
-                    "y": (
-                        gaze_info.calibrated_gaze_coordinates[1]
-                        if gaze_info.calibrated_gaze_coordinates is not None
-                        else None
-                    ),
-                },
-                "left_openness": gaze_info.left_openness,
-                "right_openness": gaze_info.right_openness,
-                "event": gaze_info.event,
-                "status": gaze_info.status,
-                "tracking_state": gaze_info.tracking_state,
-                "timestamp": gaze_info.timestamp,
-            }
-        else:
-            result = {
-                "gaze": {"x": None, "y": None},
-                "left_openness": None,
-                "right_openness": None,
-                "event": None,
-                "status": False,
-                "tracking_state": None,
-                "timestamp": None,
-            }
+            if gaze_info:
+                return {
+                    "gaze": {
+                        "x": (
+                            gaze_info.calibrated_gaze_coordinates[0]
+                            if gaze_info.calibrated_gaze_coordinates is not None
+                            else None
+                        ),
+                        "y": (
+                            gaze_info.calibrated_gaze_coordinates[1]
+                            if gaze_info.calibrated_gaze_coordinates is not None
+                            else None
+                        ),
+                    },
+                    "timestamp": gaze_info.timestamp,
+                }
 
-        return result
+        return {"gaze": {"x": None, "y": None}, "timestamp": None}
 
     def stop(self):
-        self.gaze_follower.stop_sampling()
-        self.gaze_follower.release()
+        if self.gaze_follower:
+            self.gaze_follower.stop_sampling()
+            self.gaze_follower.release()
 
     def __str__(self):
         return "gazefollower"

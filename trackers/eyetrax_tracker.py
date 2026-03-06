@@ -10,22 +10,31 @@ from trackers.base_tracker import BaseTracker
 
 
 class EyeTraxWrapper(BaseTracker):
-    def __init__(
-        self,
-        device_index: int = 0,
-        calibrate: bool = False,
-        calibration_mode: str = "",
-        model_dir: str = get_model_dir(),
-    ):
+    def __init__(self, calibration_mode: str = "", model_dir: str = get_model_dir()):
         self.tracker = GazeEstimator()
-        model_suffix = f"_{calibration_mode}" if calibration_mode else ""
-        model_path = f"{model_dir}/gaze_model{model_suffix}.pkl"
+        self.cap = None
 
-        if calibrate or not os.path.exists(model_path):
-            run_9_point_calibration(self.tracker, device_index)
-            self.tracker.save_model(model_path)
-        else:
-            self.tracker.load_model(model_path)
+        self.model_suffix = f"_{calibration_mode}" if calibration_mode else ""
+        self.model_path = f"{model_dir}/gaze_model{self.model_suffix}.pkl"
+
+        self.model_loaded = False
+
+    def is_ready(self) -> bool:
+        return os.path.exists(self.model_path)
+
+    def preload(self):
+        if self.is_ready():
+            self.tracker.load_model(self.model_path)
+            self.model_loaded = True
+
+    def calibrate(self, device_index: int):
+        run_9_point_calibration(self.tracker, device_index)
+        self.tracker.save_model(self.model_path)
+        self.model_loaded = True
+
+    def start(self, device_index: int):
+        if not self.model_loaded:
+            self.preload()
 
         self.cap = cv2.VideoCapture(device_index)
 
@@ -36,6 +45,9 @@ class EyeTraxWrapper(BaseTracker):
         self.cap = cv2.VideoCapture(device_index)
 
     def get_data(self) -> dict[str, Any]:
+        if self.cap is None:
+            raise RuntimeError("Camera not started")
+
         _, frame = self.cap.read()
         features, blink = self.tracker.extract_features(frame)
         x, y = (
@@ -49,7 +61,8 @@ class EyeTraxWrapper(BaseTracker):
         return result
 
     def stop(self):
-        self.cap.release()
+        if self.cap:
+            self.cap.release()
 
     def __str__(self):
         return "eyetrax"
