@@ -21,4 +21,4 @@ class DummyTracker(BaseTracker):
         pass
 
     def get_data(self):
-        return {"gaze": {"x": 500, "y": 300}, "timestamp": 1.0}
+        return {"gaze": {"x": 50, "y": 50}, "timestamp": 123456.0}

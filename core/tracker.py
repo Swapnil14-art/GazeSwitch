@@ -6,6 +6,7 @@ from pynput import keyboard
 
 from system_platform.config import load_config, save_config
 from system_platform.window_manager import WindowManager
+from trackers.base_tracker import BaseTracker
 from trackers.eyetrax_tracker import EyeTraxWrapper
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ class GazeTracker:
             camera_name, DEFAULT_CAMERA_INDEX
         )
 
-        self.estimator = EyeTraxWrapper()
+        self.estimator: BaseTracker = EyeTraxWrapper()
         if self.estimator.is_ready():
             Thread(target=self._preload_estimator, daemon=True).start()
 
@@ -73,6 +74,11 @@ class GazeTracker:
 
         self.hotkey_listener = None
         self._start_hotkey_listener()
+
+        # Main loop state
+        self._tracker_last_target = None
+        self._tracker_gaze_dwell_start = 0.0
+        self._tracker_intent_idle_since = 0.0
 
     def _preload_estimator(self):
         try:
@@ -308,111 +314,113 @@ class GazeTracker:
             self.estimator.stop()
         logger.info("Tracking stopped")
 
+    def _run_tracker_step(self):
+        """
+        Helper function to run a single iteration of the main
+        tracking loop.
+        """
+        now = time.time()
+
+        # Keep current_window in sync with OS focus
+        self._sync_focused_window()
+
+        data = self.estimator.get_data()  # type: ignore
+        x = data["gaze"]["x"]
+        y = data["gaze"]["y"]
+
+        # Determine if the user is actively typing or not
+        typing_idle = (now - self.last_keystroke_time) >= TYPING_IDLE_TIME
+
+        if not typing_idle:
+            self._tracker_intent_idle_since = 0.0
+        elif self._tracker_intent_idle_since == 0.0:
+            self._tracker_intent_idle_since = now
+
+        if (
+            x is not None
+            and y is not None
+            and 0 < x < self.screen_width
+            and 0 < y < self.screen_height
+        ):
+            logger.debug(f"Predicted gaze at: ({x}, {y})")
+            windows = self.wm.get_windows()
+
+            # Cycling is handled immediately and independently of the normal
+            # dwell/intent logic because it is an explicit user action.
+            if self.cycle_windows_triggered or self.cycle_windows_triggered_reverse:
+                reverse = self.cycle_windows_triggered_reverse
+                self._cycle_windows_at_gaze(int(x), int(y), windows, reverse=reverse)
+
+                self.cycle_windows_triggered = False
+                self.cycle_windows_triggered_reverse = False
+
+                # Skip the rest of the gaze intent logic this frame to avoid the
+                # dwell-based focusing logic triggering immediately after cycling.
+                time.sleep(POLL_INTERVAL)
+                return
+
+            target_window = self.wm.window_at_point(int(x), int(y), windows)
+
+            if target_window:
+                # Reset dwell timer if target changes
+                if not self._same_window(target_window, self._tracker_last_target):
+                    self._tracker_last_target = target_window
+                    self._tracker_gaze_dwell_start = now
+
+                    # Gaze moved to a different window region, so the overlap stack
+                    # is no longer valid. Reset cycling so a new stack is computed.
+                    self.cycle_stack = None
+                    self.cycle_index = 0
+
+                # Check intent conditions
+                gaze_dwell = now - self._tracker_gaze_dwell_start
+                intent_idle = (
+                    now - self._tracker_intent_idle_since
+                    if self._tracker_intent_idle_since > 0.0
+                    else 0.0
+                )
+
+                if self.manual_override_triggered or (
+                    gaze_dwell >= DWELL_TIME
+                    and intent_idle >= TYPING_IDLE_TIME
+                    and (
+                        not self.current_window
+                        or not self._same_window(target_window, self.current_window)
+                    )
+                ):
+                    logger.info(
+                        f"Focusing window via gaze: {target_window.get('title')}"
+                    )
+                    self.wm.focus_window(target_window)
+                    self.current_window = target_window
+
+                    # Reset cycling
+                    self.cycle_stack = None
+                    self.cycle_index = 0
+
+                    # Reset to prevent immediate re-trigger
+                    self._tracker_gaze_dwell_start = now
+                    self._tracker_intent_idle_since = now
+                    self.manual_override_triggered = False
+            else:
+                # No window detected, reset gaze dwell
+                self._tracker_last_target = None
+                self._tracker_gaze_dwell_start = 0.0
+
+                self.cycle_stack = None
+                self.cycle_index = 0
+        else:
+            # Invalid gaze, reset gaze dwell
+            self._tracker_last_target = None
+            self._tracker_gaze_dwell_start = 0.0
+
+            self.cycle_stack = None
+            self.cycle_index = 0
+
     def _run_tracker(self):
         """
         Main loop to track gaze and focus windows accordingly.
         """
-        last_target = None
-        gaze_dwell_start = 0.0
-        intent_idle_since = 0.0
-
         while self.running:
-            now = time.time()
-
-            # Keep current_window in sync with OS focus
-            self._sync_focused_window()
-
-            data = self.estimator.get_data()  # type: ignore
-            x = data["gaze"]["x"]
-            y = data["gaze"]["y"]
-
-            # Determine if the user is actively typing or not
-            typing_idle = (now - self.last_keystroke_time) >= TYPING_IDLE_TIME
-
-            if not typing_idle:
-                intent_idle_since = 0.0
-            elif intent_idle_since == 0.0:
-                intent_idle_since = now
-
-            if (
-                x is not None
-                and y is not None
-                and 0 < x < self.screen_width
-                and 0 < y < self.screen_height
-            ):
-                logger.debug(f"Predicted gaze at: ({x}, {y})")
-                windows = self.wm.get_windows()
-
-                # Cycling is handled immediately and independently of the normal
-                # dwell/intent logic because it is an explicit user action.
-                if self.cycle_windows_triggered or self.cycle_windows_triggered_reverse:
-                    reverse = self.cycle_windows_triggered_reverse
-                    self._cycle_windows_at_gaze(
-                        int(x), int(y), windows, reverse=reverse
-                    )
-
-                    self.cycle_windows_triggered = False
-                    self.cycle_windows_triggered_reverse = False
-
-                    # Skip the rest of the gaze intent logic this frame to avoid the
-                    # dwell-based focusing logic triggering immediately after cycling.
-                    time.sleep(POLL_INTERVAL)
-                    continue
-
-                target_window = self.wm.window_at_point(int(x), int(y), windows)
-
-                if target_window:
-                    # Reset dwell timer if target changes
-                    if not self._same_window(target_window, last_target):
-                        last_target = target_window
-                        gaze_dwell_start = now
-
-                        # Gaze moved to a different window region, so the overlap stack
-                        # is no longer valid. Reset cycling so a new stack is computed.
-                        self.cycle_stack = None
-                        self.cycle_index = 0
-
-                    # Check intent conditions
-                    gaze_dwell = now - gaze_dwell_start
-                    intent_idle = (
-                        now - intent_idle_since if intent_idle_since > 0.0 else 0.0
-                    )
-
-                    if self.manual_override_triggered or (
-                        gaze_dwell >= DWELL_TIME
-                        and intent_idle >= TYPING_IDLE_TIME
-                        and (
-                            not self.current_window
-                            or not self._same_window(target_window, self.current_window)
-                        )
-                    ):
-                        logger.info(
-                            f"Focusing window via gaze: {target_window.get('title')}"
-                        )
-                        self.wm.focus_window(target_window)
-                        self.current_window = target_window
-
-                        # Reset cycling
-                        self.cycle_stack = None
-                        self.cycle_index = 0
-
-                        # Reset to prevent immediate re-trigger
-                        gaze_dwell_start = now
-                        intent_idle_since = now
-                        self.manual_override_triggered = False
-                else:
-                    # No window detected, reset gaze dwell
-                    last_target = None
-                    gaze_dwell_start = 0.0
-
-                    self.cycle_stack = None
-                    self.cycle_index = 0
-            else:
-                # Invalid gaze, reset gaze dwell
-                last_target = None
-                gaze_dwell_start = 0.0
-
-                self.cycle_stack = None
-                self.cycle_index = 0
-
+            self._run_tracker_step()
             time.sleep(POLL_INTERVAL)
