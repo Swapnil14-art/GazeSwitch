@@ -4,6 +4,7 @@ from threading import Thread
 
 from pynput import keyboard
 
+from core.dwell_learner import DwellLearner
 from system_platform.config import load_config, save_config
 from system_platform.window_manager import WindowManager
 from trackers.base_tracker import BaseTracker
@@ -20,28 +21,41 @@ DEFAULT_MANUAL_OVERRIDE_HOTKEY = "<alt>+\\"
 DEFAULT_CYCLE_WINDOWS_HOTKEY = "<alt>+]"
 DEFAULT_CYCLE_WINDOWS_REVERSE_HOTKEY = "<alt>+["
 
+# If the user corrects focus within this window after an automatic
+# gaze focus, it is treated as a "regret" event (focus happened too early).
+REGRET_WINDOW = 0.7  # seconds
+
+# If the user stays in the auto-focused window longer than this,
+# the focus timing is considered successful.
+SUCCESS_WINDOW = 2.0  # seconds
+
 
 class GazeTracker:
     def __init__(self, window_manager: WindowManager):
+        # Configuration
         self.config = load_config()
-        camera_name = self.config.get("camera_name", "")
 
+        # Window manager integration
         self.wm = window_manager
+        camera_name = self.config.get("camera_name", "")
         self.current_camera = self.wm.list_video_devices().get(
             camera_name, DEFAULT_CAMERA_INDEX
         )
 
+        # Screen geometry
+        self.screen_width, self.screen_height = self.wm.get_screen_size()
+
+        # Gaze tracker
         self.estimator: BaseTracker = EyeTraxWrapper()
         if self.estimator.is_ready():
             Thread(target=self._preload_estimator, daemon=True).start()
 
+        # Runtime state
         self.running = False
         self.current_window = None
         self.last_keystroke_time = time.time()
 
-        self.screen_width, self.screen_height = self.wm.get_screen_size()
-
-        # Keyboard listener for typing detection
+        # Input listeners
         self.keyboard_listener = keyboard.Listener(on_press=self._on_key_press)
         self.keyboard_listener.start()
 
@@ -52,30 +66,36 @@ class GazeTracker:
         )
 
         # Cycle windows hotkeys
-        self.cycle_windows_triggered = False
+        self.cycle_forward_triggered = False
         self.cycle_windows_hotkey = self.config.get(
             "cycle_windows_hotkey", DEFAULT_CYCLE_WINDOWS_HOTKEY
         )
-        self.cycle_windows_triggered_reverse = False
+        self.cycle_reverse_triggered = False
         self.cycle_windows_reverse_hotkey = self.config.get(
             "cycle_windows_reverse_hotkey", DEFAULT_CYCLE_WINDOWS_REVERSE_HOTKEY
         )
 
+        self.hotkey_listener = None
+        self._start_hotkey_listener()
+
         # Cycling state for overlapping windows.
-        # The initial stack of windows under the gaze point is stored because
-        # focusing a window usually brings it to the top of the OS Z-order.
-        # If we recomputed the stack every time, the order would change and
-        # cycling would bounce between only the top two windows.
-        # By freezing the initial stack we can cycle deterministically:
-        # A → B → C → A even though the OS keeps reordering windows.
+        # We freeze the initial window stack so cycling remains deterministic
+        # even though focusing windows changes the OS Z-order.
         self.cycle_stack = None
         self.cycle_index = 0
         self.last_cycle_time = 0
 
-        self.hotkey_listener = None
-        self._start_hotkey_listener()
+        # Adaptive dwell learning state.
+        # The learner dynamically adjusts the gaze dwell threshold based on
+        # user behaviour (regret events vs successful focuses).
+        initial_dwell = self.config.get("adaptive_dwell", DWELL_TIME)
+        self.dwell_learner = DwellLearner(initial_dwell)
 
-        # Main loop state
+        # Track last automatic focus so we can detect regret or success
+        self.last_auto_focus_time = None
+        self.last_auto_focused_window = None
+
+        # Main loop tracking state
         self._tracker_last_target = None
         self._tracker_gaze_dwell_start = 0.0
         self._tracker_intent_idle_since = 0.0
@@ -115,18 +135,29 @@ class GazeTracker:
         self.manual_override_triggered = True
         logger.info("Manual override triggered")
 
+        # Regret event - User used manual override shortly after
+        # an automatic focus
+        if (
+            self.last_auto_focus_time
+            and time.time() - self.last_auto_focus_time < REGRET_WINDOW
+        ):
+            if self.dwell_learner.on_regret():
+                self._persist_dwell()
+
+            self.last_auto_focus_time = None
+
     def _cycle_windows(self):
         """
         Cycle through all windows under the gaze point.
         """
-        self.cycle_windows_triggered = True
+        self.cycle_forward_triggered = True
         logger.info("Cycle windows hotkey triggered")
 
     def _cycle_windows_reverse(self):
         """
         Cycle through all windows under the gaze point in reverse.
         """
-        self.cycle_windows_triggered_reverse = True
+        self.cycle_reverse_triggered = True
         logger.info("Reverse cycle windows hotkey triggered")
 
     def _cycle_windows_at_gaze(
@@ -226,6 +257,32 @@ class GazeTracker:
             self.current_window = focused
             logger.debug(f"OS focus changed to: {focused.get('title')}")
 
+        # Regret event - User manually switched window shortly after an
+        # automatic focus
+        if (
+            self.last_auto_focus_time
+            and time.time() - self.last_auto_focus_time < REGRET_WINDOW
+        ):
+            if not self._same_window(focused, self.last_auto_focused_window):
+                if self.dwell_learner.on_regret():
+                    self._persist_dwell()
+
+                self.last_auto_focus_time = None
+
+    def _persist_dwell(self):
+        """
+        Persist the learned dwell value to the config.
+
+        This is only called when the learner actually changes the dwell
+        threshold to avoid excessive disk writes.
+        """
+        dwell = self.dwell_learner.get()
+
+        self.config["adaptive_dwell"] = dwell
+        save_config(self.config)
+
+        logger.debug(f"Adaptive dwell saved: {dwell:.2f}s")
+
     def update_manual_override_hotkey(self, hotkey: str):
         """
         Update the manual override hotkey.
@@ -321,6 +378,18 @@ class GazeTracker:
         """
         now = time.time()
 
+        # Detect a successful auto-focus.
+        # If the user stayed in the focused window long enough without correcting it,
+        # we treat this as confirmation that the dwell timing was appropriate.
+        if (
+            self.last_auto_focus_time
+            and now - self.last_auto_focus_time > SUCCESS_WINDOW
+        ):
+            if self.dwell_learner.on_success():
+                self._persist_dwell()
+
+            self.last_auto_focus_time = None
+
         # Keep current_window in sync with OS focus
         self._sync_focused_window()
 
@@ -347,15 +416,17 @@ class GazeTracker:
 
             # Cycling is handled immediately and independently of the normal
             # dwell/intent logic because it is an explicit user action.
-            if self.cycle_windows_triggered or self.cycle_windows_triggered_reverse:
-                reverse = self.cycle_windows_triggered_reverse
+            if self.cycle_forward_triggered or self.cycle_reverse_triggered:
+                reverse = self.cycle_reverse_triggered
                 self._cycle_windows_at_gaze(int(x), int(y), windows, reverse=reverse)
 
-                self.cycle_windows_triggered = False
-                self.cycle_windows_triggered_reverse = False
+                self.cycle_forward_triggered = False
+                self.cycle_reverse_triggered = False
 
                 # Skip the rest of the gaze intent logic this frame to avoid the
                 # dwell-based focusing logic triggering immediately after cycling.
+                # Cycling is an explicit user action and should not be followed by
+                # automatic focus logic in the same iteration.
                 time.sleep(POLL_INTERVAL)
                 return
 
@@ -380,8 +451,16 @@ class GazeTracker:
                     else 0.0
                 )
 
+                # Debug line to monitor dwell, idle, and threshold
+                dwell_threshold = self.dwell_learner.get()
+                logger.debug(
+                    f"dwell={gaze_dwell:.2f} "
+                    f"idle={intent_idle:.2f} "
+                    f"threshold={dwell_threshold:.2f}"
+                )
+
                 if self.manual_override_triggered or (
-                    gaze_dwell >= DWELL_TIME
+                    gaze_dwell >= dwell_threshold
                     and intent_idle >= TYPING_IDLE_TIME
                     and (
                         not self.current_window
@@ -391,8 +470,17 @@ class GazeTracker:
                     logger.info(
                         f"Focusing window via gaze: {target_window.get('title')}"
                     )
+
+                    logger.debug(
+                        f"Adaptive dwell threshold: {self.dwell_learner.get():.2f}s"
+                    )
+
                     self.wm.focus_window(target_window)
                     self.current_window = target_window
+
+                    self.last_auto_focus_time = now
+                    self.last_auto_focused_window = target_window
+                    self.dwell_learner.on_focus()
 
                     # Reset cycling
                     self.cycle_stack = None
