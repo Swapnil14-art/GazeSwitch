@@ -21,9 +21,13 @@ DEFAULT_MANUAL_OVERRIDE_HOTKEY = "<alt>+\\"
 DEFAULT_CYCLE_WINDOWS_HOTKEY = "<alt>+]"
 DEFAULT_CYCLE_WINDOWS_REVERSE_HOTKEY = "<alt>+["
 
+# REGRET_WINDOW and SUCCESS_WINDOW define how user behaviour is interpreted.
+# They are not hard thresholds, but are used to derive *signal strength*
+# for adaptive learning (early corrections → regret, long stays → success).
+
 # If the user corrects focus within this window after an automatic
 # gaze focus, it is treated as a "regret" event (focus happened too early).
-REGRET_WINDOW = 0.7  # seconds
+REGRET_WINDOW = 1.0  # seconds
 
 # If the user stays in the auto-focused window longer than this,
 # the focus timing is considered successful.
@@ -136,12 +140,22 @@ class GazeTracker:
         logger.info("Manual override triggered")
 
         # Regret event - User used manual override shortly after
-        # an automatic focus
-        if (
-            self.last_auto_focus_time
-            and time.time() - self.last_auto_focus_time < REGRET_WINDOW
-        ):
-            if self.dwell_learner.on_regret():
+        # an automatic focus (focus happened too early)
+        time_since_focus = (
+            time.time() - self.last_auto_focus_time
+            if self.last_auto_focus_time is not None
+            else None
+        )
+        if time_since_focus and time_since_focus < REGRET_WINDOW:
+            # Convert time into a normalised regret strength
+            # - Immediate correction (time = 0) → strength = 1.0 (strong regret)
+            # - Near the boundary (time = REGRET_WINDOW) → strength = 0.0 (weak regret)
+            #
+            # This creates a smooth gradient instead of a binary signal,
+            # allowing the learner to adjust proportionally to how wrong it was.
+            strength = 1 - (time_since_focus / REGRET_WINDOW)
+
+            if self.dwell_learner.on_regret(strength):
                 self._persist_dwell()
 
             self.last_auto_focus_time = None
@@ -259,12 +273,22 @@ class GazeTracker:
 
         # Regret event - User manually switched window shortly after an
         # automatic focus
-        if (
-            self.last_auto_focus_time
-            and time.time() - self.last_auto_focus_time < REGRET_WINDOW
-        ):
+        time_since_focus = (
+            time.time() - self.last_auto_focus_time
+            if self.last_auto_focus_time is not None
+            else None
+        )
+        if time_since_focus and time_since_focus < REGRET_WINDOW:
             if not self._same_window(focused, self.last_auto_focused_window):
-                if self.dwell_learner.on_regret():
+                # Convert time into a normalised regret strength
+                # - Immediate correction (time = 0) → strength = 1.0 (strong regret)
+                # - Near the boundary (time = REGRET_WINDOW) → strength = 0.0 (weak)
+                #
+                # This creates a smooth gradient instead of a binary signal,
+                # allowing the learner to adjust proportionally to how wrong it was.
+                strength = 1 - (time_since_focus / REGRET_WINDOW)
+
+                if self.dwell_learner.on_regret(strength):
                     self._persist_dwell()
 
                 self.last_auto_focus_time = None
@@ -381,11 +405,19 @@ class GazeTracker:
         # Detect a successful auto-focus.
         # If the user stayed in the focused window long enough without correcting it,
         # we treat this as confirmation that the dwell timing was appropriate.
-        if (
-            self.last_auto_focus_time
-            and now - self.last_auto_focus_time > SUCCESS_WINDOW
-        ):
-            if self.dwell_learner.on_success():
+        time_since_focus = (
+            time.time() - self.last_auto_focus_time
+            if self.last_auto_focus_time is not None
+            else None
+        )
+        if time_since_focus and time_since_focus > SUCCESS_WINDOW:
+            # Convert time into a normalised success strength:
+            # - Just above threshold → small strength (weak confirmation)
+            # - Much longer stay → strength approaches 1.0 (strong confidence)
+            #
+            # This rewards the system more when the user clearly intended the focus.
+            strength = min(1.0, (time_since_focus - SUCCESS_WINDOW) / SUCCESS_WINDOW)
+            if self.dwell_learner.on_success(strength):
                 self._persist_dwell()
 
             self.last_auto_focus_time = None
