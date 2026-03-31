@@ -85,7 +85,6 @@ class GazeFollowerWrapper(BaseTracker):
     def stop(self):
         if self.gaze_follower:
             self.gaze_follower.stop_sampling()
-            self.gaze_follower.release()
 
     def release_camera(self):
         if self.gaze_follower:
