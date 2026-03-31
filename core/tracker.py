@@ -22,11 +22,11 @@ DEFAULT_CYCLE_WINDOWS_HOTKEY = "<alt>+]"
 DEFAULT_CYCLE_WINDOWS_REVERSE_HOTKEY = "<alt>+["
 
 # REGRET_WINDOW and SUCCESS_WINDOW define how user behaviour is interpreted.
-# They are not hard thresholds, but are used to derive *signal strength*
-# for adaptive learning (early corrections → regret, long stays → success).
+# They are not hard thresholds, but are used to derive signal strength
+# for adaptive learning (early corrections - regret, long stays - success).
 
 # If the user corrects focus within this window after an automatic
-# gaze focus, it is treated as a "regret" event (focus happened too early).
+# gaze focus, it is treated as a regret event (focus happened too early).
 REGRET_WINDOW = 1.0  # seconds
 
 # If the user stays in the auto-focused window longer than this,
@@ -52,7 +52,8 @@ class GazeTracker:
         # Gaze tracker
         self.estimator: BaseTracker = EyeTraxWrapper()
         if self.estimator.is_ready():
-            Thread(target=self._preload_estimator, daemon=True).start()
+            Thread(target=self._preload_gaze_model, daemon=True).start()
+        Thread(target=self._preload_camera, daemon=True).start()
 
         # Runtime state
         self.running = False
@@ -104,13 +105,21 @@ class GazeTracker:
         self._tracker_gaze_dwell_start = 0.0
         self._tracker_intent_idle_since = 0.0
 
-    def _preload_estimator(self):
+    def _preload_gaze_model(self):
         try:
             logger.info("Preloading gaze model...")
-            self.estimator.preload()
+            self.estimator.preload_model()
             logger.info("Model preloaded")
         except Exception:
-            logger.exception("Preload failed")
+            logger.exception("Gaze model preload failed")
+
+    def _preload_camera(self):
+        try:
+            logger.info("Preloading camera...")
+            self.estimator.preload_camera(self.current_camera)
+            logger.info("Camera preloaded")
+        except Exception:
+            logger.exception("Camera preload failed")
 
     def _on_key_press(self, _):
         self.last_keystroke_time = time.time()
@@ -148,8 +157,8 @@ class GazeTracker:
         )
         if time_since_focus and time_since_focus < REGRET_WINDOW:
             # Convert time into a normalised regret strength
-            # - Immediate correction (time = 0) → strength = 1.0 (strong regret)
-            # - Near the boundary (time = REGRET_WINDOW) → strength = 0.0 (weak regret)
+            # - Immediate correction (time = 0) - strength = 1.0 (strong regret)
+            # - Near the boundary (time = REGRET_WINDOW) - strength = 0.0 (weak regret)
             #
             # This creates a smooth gradient instead of a binary signal,
             # allowing the learner to adjust proportionally to how wrong it was.
@@ -356,8 +365,7 @@ class GazeTracker:
         ]
         save_config(self.config)
 
-        if self.estimator:
-            self.estimator.set_video_device(device_index)
+        self.estimator.set_video_device(device_index)
         logger.info(f"Video device set to {device_index}")
 
     def calibrate(self, icon=None, _=None):
@@ -391,9 +399,20 @@ class GazeTracker:
         Stop the gaze tracking process.
         """
         self.running = False
-        if self.estimator:
-            self.estimator.stop()
         logger.info("Tracking stopped")
+
+    def release_camera(self):
+        """
+        Release the camera resource.
+        """
+        if self.running:
+            self.wm.notify("Cannot release camera while tracking!")
+            logger.warning("Cannot release camera while tracking")
+            return
+
+        self.estimator.release_camera()
+        self.wm.notify("Camera released")
+        logger.info("Camera released")
 
     def _run_tracker_step(self):
         """

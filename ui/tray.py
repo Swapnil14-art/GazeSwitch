@@ -95,6 +95,13 @@ def create_tray_icon(tracker: GazeTracker) -> None:
             checked=lambda item: tracker.running,
         ),
         item("Stop Tracking", lambda icon, item: tracker.stop_tracking()),
+        item(
+            "Release Camera",
+            lambda icon, item: tracker.release_camera(),
+            enabled=lambda item: (
+                not tracker.running and tracker.estimator.is_camera_ready(),  # type: ignore
+            ),
+        ),
         item("Calibrate", lambda icon, item: tracker.calibrate()),
         video_menu,
         hotkey_menu,
@@ -112,6 +119,7 @@ def start_tracking(tracker: GazeTracker):
     Args:
         tracker (GazeTracker): The tracker instance to start tracking on.
     """
+    tracker.wm.notify("Starting tracking, please wait...")
     tracker.start_tracking()
     tracker.wm.notify("Tracking Started")
 
@@ -155,4 +163,5 @@ def exit_app(icon, _, tracker: GazeTracker):
     Exit the application by stopping tracking and the tray icon.
     """
     tracker.stop_tracking()
+    tracker.release_camera()
     icon.stop()

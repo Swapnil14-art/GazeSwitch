@@ -17,6 +17,9 @@ class GazeFollowerWrapper(BaseTracker):
     def is_ready(self) -> bool:
         return os.path.exists(self.model_path)
 
+    def is_camera_ready(self) -> bool:
+        return self.gaze_follower is not None and self.gaze_follower.camera is not None
+
     def calibrate(self, device_index: int):
         self.gaze_follower = GazeFollower(
             camera=WebCamCamera(webcam_id=device_index),
@@ -82,6 +85,10 @@ class GazeFollowerWrapper(BaseTracker):
     def stop(self):
         if self.gaze_follower:
             self.gaze_follower.stop_sampling()
+            self.gaze_follower.release()
+
+    def release_camera(self):
+        if self.gaze_follower:
             self.gaze_follower.release()
 
     def __str__(self):

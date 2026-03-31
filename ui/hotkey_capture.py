@@ -43,7 +43,7 @@ def capture_hotkey(on_complete):
             listener.stop()
             return
 
-        # Only finalize when the chosen main key is released
+        # Only finalise when the chosen main key is released
         if key != main_key:
             return
 

@@ -14,9 +14,24 @@ class BaseTracker(ABC):
         and is ready to start tracking.
         """
 
-    def preload(self):
+    @abstractmethod
+    def is_camera_ready(self) -> bool:
+        """
+        Return True if the camera is initialised.
+        """
+
+    @abstractmethod
+    def preload_model(self):
         """
         Optional: load model into memory so tracking can start instantly.
+        Default does nothing.
+        """
+        pass
+
+    @abstractmethod
+    def preload_camera(self, device_index: int):
+        """
+        Optional: warm up the camera so tracking can start instantly.
         Default does nothing.
         """
         pass
@@ -36,7 +51,13 @@ class BaseTracker(ABC):
     @abstractmethod
     def stop(self):
         """
-        Stop tracking and release resources.
+        Stop tracking.
+        """
+
+    @abstractmethod
+    def release_camera(self):
+        """
+        Release the camera resource if it's currently held.
         """
 
     @abstractmethod
