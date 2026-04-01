@@ -11,14 +11,27 @@ from trackers.base_tracker import BaseTracker
 
 class GazeFollowerWrapper(BaseTracker):
     def __init__(self, calibration_mode: str = "", model_dir: str = get_model_dir()):
-        self.model_path = model_dir + calibration_mode
         self.gaze_follower = None
+        self.calibration = None
+        self.camera = None
+
+        self.model_path = model_dir + calibration_mode
+        self.model_loaded = False
 
     def is_ready(self) -> bool:
         return os.path.exists(self.model_path)
 
     def is_camera_ready(self) -> bool:
-        return self.gaze_follower is not None and self.gaze_follower.camera is not None
+        return self.camera is not None
+
+    def preload_model(self):
+        if self.is_ready():
+            self.calibration = SVRCalibration(model_save_path=self.model_path)
+            self.model_loaded = True
+
+    def preload_camera(self, device_index: int):
+        if not self.is_camera_ready():
+            self.camera = WebCamCamera(webcam_id=device_index)
 
     def calibrate(self, device_index: int):
         self.gaze_follower = GazeFollower(
@@ -30,7 +43,13 @@ class GazeFollowerWrapper(BaseTracker):
         self.gaze_follower.calibration.save_model()
 
     def start(self, device_index: int):
-        if self.gaze_follower is None:
+        if not self.model_loaded:
+            self.preload_model()
+
+        if not self.is_camera_ready():
+            self.preload_camera(device_index)
+
+        if not self.gaze_follower:
             self.gaze_follower = GazeFollower(
                 camera=WebCamCamera(webcam_id=device_index),
                 calibration=SVRCalibration(model_save_path=self.model_path),
@@ -89,6 +108,7 @@ class GazeFollowerWrapper(BaseTracker):
     def release_camera(self):
         if self.gaze_follower:
             self.gaze_follower.release()
+            self.camera = None
 
     def __str__(self):
         return "gazefollower"

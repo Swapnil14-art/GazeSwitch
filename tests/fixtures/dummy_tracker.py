@@ -5,7 +5,13 @@ class DummyTracker(BaseTracker):
     def is_ready(self):
         return True
 
-    def preload(self):
+    def is_camera_ready(self):
+        return True
+
+    def preload_model(self):
+        pass
+
+    def preload_camera(self, device_index):
         pass
 
     def calibrate(self, device_index):
@@ -14,10 +20,13 @@ class DummyTracker(BaseTracker):
     def start(self, device_index):
         pass
 
-    def set_video_device(self, device_index):
+    def stop(self):
         pass
 
-    def stop(self):
+    def release_camera(self):
+        pass
+
+    def set_video_device(self, device_index):
         pass
 
     def get_data(self):
