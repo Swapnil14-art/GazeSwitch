@@ -34,13 +34,6 @@ class WindowsWindowManager(WindowManager):
 
         return windows
 
-    def window_at_point(self, x: int, y: int, windows: list[dict]):
-        for w in windows:
-            left, top, right, bottom = w["rect"]
-            if left <= x <= right and top <= y <= bottom:
-                return w
-        return None
-
     def focus_window(self, window: dict) -> None:
         try:
             shell = win32com.client.Dispatch("WScript.Shell")

@@ -1,12 +1,19 @@
-pynput
+# Common dependencies
 opencv-python
-eyetrax
-pywin32
-pystray
 mediapipe==0.10.14
 pyinstaller
-gazefollower
 pytest
 ruff
-pygrabber
-winotify 
+pynput
+eyetrax
+gazefollower
+pystray
+
+# Windows-only dependencies
+pywin32; sys_platform == "win32"
+winotify; sys_platform == "win32"
+
+# Linux-only dependencies
+notify2; sys_platform == "linux"
+dbus-python; sys_platform == "linux"
+pyudev; sys_platform == "linux"
