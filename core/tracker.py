@@ -116,9 +116,11 @@ class GazeTracker:
             return
 
         self.current_camera = device_index
-        self.config["camera_name"] = list(self.wm.list_video_devices().keys())[
-            device_index
-        ]
+        self.config["camera_name"] = next(
+            key
+            for key, value in self.wm.list_video_devices().items()
+            if value == device_index
+        )
         save_config(self.config)
 
         if self.estimator:
