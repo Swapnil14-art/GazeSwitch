@@ -1,16 +1,17 @@
 import json
+from typing import Any
 
 from system_platform.utils import get_app_data_dir
 
 CONFIG_FILE = get_app_data_dir() / "config.json"
 
 
-def load_config() -> dict[str, str]:
+def load_config() -> dict[str, Any]:
     """
     Load configuration from the config file.
 
     Returns:
-        dict[str, str]: The loaded configuration as a dictionary.
+        dict[str, Any]: The loaded configuration as a dictionary.
     """
     if not CONFIG_FILE.exists():
         return {}

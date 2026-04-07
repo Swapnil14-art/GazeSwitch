@@ -9,6 +9,7 @@ from pystray import MenuItem as item
 
 from core.tracker import GazeTracker
 from ui.hotkey_capture import capture_hotkey
+from ui.hotkey_display import format_hotkey_for_display
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ def create_tray_icon(tracker: GazeTracker) -> None:
     even if they are not needed by the implementation. The parameters are therefore 
     accepted for compatibility but intentionally unused.
     """
-    # Build dynamic submenu for video devices
+    # Video devices submenu
     video_devices = tracker.wm.list_video_devices()
 
     def make_video_item(name: str, idx: int):
@@ -57,6 +58,36 @@ def create_tray_icon(tracker: GazeTracker) -> None:
         ),
     )
 
+    # Hotkey submenu
+    def make_hotkey_item(label: str, hotkey_attr: str, action_type: str):
+        """
+        Helper to create a pystray MenuItem for a hotkey.
+
+        Args:
+            label (str): The base label for the menu item (e.g., "Manual Override").
+            hotkey_attr (str): The attribute name on the tracker storing the hotkey.
+            action_type (str): The type passed to change_hotkey when clicked.
+        """
+        return item(
+            lambda item: (
+                f"{label} ({format_hotkey_for_display(getattr(tracker, hotkey_attr))})"
+            ),
+            lambda icon, item: change_hotkey(icon, tracker, action_type),
+        )
+
+    hotkey_menu = item(
+        "Configure Hotkeys",
+        pystray.Menu(
+            make_hotkey_item(
+                "Manual Override", "manual_override_hotkey", "manual_override"
+            ),
+            make_hotkey_item("Cycle Forward", "cycle_windows_hotkey", "cycle_forward"),
+            make_hotkey_item(
+                "Cycle Reverse", "cycle_windows_reverse_hotkey", "cycle_reverse"
+            ),
+        ),
+    )
+
     menu = (
         item(
             "Start Tracking",
@@ -64,12 +95,16 @@ def create_tray_icon(tracker: GazeTracker) -> None:
             checked=lambda item: tracker.running,
         ),
         item("Stop Tracking", lambda icon, item: tracker.stop_tracking()),
+        item(
+            "Release Camera",
+            lambda icon, item: tracker.release_camera(),
+            enabled=lambda item: (
+                not tracker.running and tracker.estimator.is_camera_ready(),  # type: ignore
+            ),
+        ),
         item("Calibrate", lambda icon, item: tracker.calibrate()),
         video_menu,
-        item(
-            lambda item: f"Change Manual Override ({tracker.manual_override_hotkey})",
-            lambda icon, item: change_manual_override_hotkey(icon, tracker),
-        ),
+        hotkey_menu,
         item("Exit", partial(exit_app, tracker=tracker)),
     )
 
@@ -84,24 +119,41 @@ def start_tracking(tracker: GazeTracker):
     Args:
         tracker (GazeTracker): The tracker instance to start tracking on.
     """
+    tracker.wm.notify("Starting tracking, please wait...")
     tracker.start_tracking()
     tracker.wm.notify("Tracking Started")
 
 
-def change_manual_override_hotkey(icon, tracker: GazeTracker):
+def change_hotkey(icon, tracker: GazeTracker, hotkey_type: str):
     """
-    Change the manual override hotkey by capturing a new key combination.
+    Capture and update a hotkey for a specific action.
 
     Args:
         icon (_type_): The system tray icon.
         tracker (GazeTracker): The tracker instance to update the hotkey for.
+        hotkey_type (str): The hotkey to update.
     """
-    logger.info("Press new hotkey combination for manual override...")
+    action_name = {
+        "manual_override": "Manual Override",
+        "cycle_forward": "Cycle Forward",
+        "cycle_reverse": "Cycle Reverse",
+    }[hotkey_type]
+
+    tracker.wm.notify(f"Press new hotkey for {action_name}...")
 
     def on_complete(hotkey):
-        tracker.update_manual_override_hotkey(hotkey)
+        if hotkey_type == "manual_override":
+            tracker.update_manual_override_hotkey(hotkey)
+        elif hotkey_type == "cycle_forward":
+            tracker.update_cycle_hotkey(hotkey, reverse=False)
+        elif hotkey_type == "cycle_reverse":
+            tracker.update_cycle_hotkey(hotkey, reverse=True)
+
         icon.update_menu()
-        logger.info(f"New shortcut: {hotkey}")
+        logger.info(f"New shortcut for {hotkey_type}: {hotkey}")
+        tracker.wm.notify(
+            f"{action_name} hotkey set to {format_hotkey_for_display(hotkey)}"
+        )
 
     capture_hotkey(on_complete)
 
@@ -111,4 +163,5 @@ def exit_app(icon, _, tracker: GazeTracker):
     Exit the application by stopping tracking and the tray icon.
     """
     tracker.stop_tracking()
+    tracker.release_camera()
     icon.stop()

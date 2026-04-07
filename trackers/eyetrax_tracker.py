@@ -10,33 +10,59 @@ from trackers.base_tracker import BaseTracker
 
 
 class EyeTraxWrapper(BaseTracker):
-    def __init__(
-        self,
-        device_index: int = 0,
-        calibrate: bool = False,
-        calibration_mode: str = "",
-        model_dir: str = get_model_dir(),
-    ):
+    def __init__(self, calibration_mode: str = "", model_dir: str = get_model_dir()):
         self.tracker = GazeEstimator()
-        model_suffix = f"_{calibration_mode}" if calibration_mode else ""
-        model_path = f"{model_dir}/gaze_model{model_suffix}.pkl"
+        self.cap = None
 
-        if calibrate or not os.path.exists(model_path):
-            run_9_point_calibration(self.tracker, device_index)
-            self.tracker.save_model(model_path)
-        else:
-            self.tracker.load_model(model_path)
+        self.model_suffix = f"_{calibration_mode}" if calibration_mode else ""
+        self.model_path = f"{model_dir}/gaze_model{self.model_suffix}.pkl"
 
-        self.cap = cv2.VideoCapture(device_index)
+        self.model_loaded = False
+
+    def is_ready(self) -> bool:
+        return os.path.exists(self.model_path)
+
+    def is_camera_ready(self) -> bool:
+        return self.cap is not None and self.cap.isOpened()
+
+    def preload_model(self):
+        if self.is_ready():
+            self.tracker.load_model(self.model_path)
+            self.model_loaded = True
+
+    def preload_camera(self, device_index: int):
+        if not self.is_camera_ready():
+            cap = cv2.VideoCapture(device_index)
+
+            for _ in range(3):
+                cap.read()
+                time.sleep(0.01)
+
+            self.cap = cap
+
+    def calibrate(self, device_index: int):
+        run_9_point_calibration(self.tracker, device_index)
+        self.tracker.save_model(self.model_path)
+        self.model_loaded = True
+
+    def start(self, device_index: int):
+        if not self.model_loaded:
+            self.preload_model()
+
+        self.preload_camera(device_index)
 
     def set_video_device(self, device_index: int):
         if self.cap is not None:
             self.cap.release()
+            self.cap = None
 
-        self.cap = cv2.VideoCapture(device_index)
+        self.preload_camera(device_index)
 
     def get_data(self) -> dict[str, Any]:
-        _, frame = self.cap.read()
+        if not self.is_camera_ready():
+            raise RuntimeError("Camera not started")
+
+        _, frame = self.cap.read()  # type: ignore
         features, blink = self.tracker.extract_features(frame)
         x, y = (
             self.tracker.predict([features])[0]
@@ -49,7 +75,12 @@ class EyeTraxWrapper(BaseTracker):
         return result
 
     def stop(self):
-        self.cap.release()
+        pass
+
+    def release_camera(self):
+        if self.cap:
+            self.cap.release()
+            self.cap = None
 
     def __str__(self):
         return "eyetrax"

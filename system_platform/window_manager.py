@@ -13,6 +13,10 @@ class WindowManager(ABC):
         """
         pass
 
+    def _point_in_rect(self, x, y, rect):
+        left, top, right, bottom = rect
+        return left <= x <= right and top <= y <= bottom
+
     def window_at_point(self, x: int, y: int, windows: list[dict]) -> dict | None:
         """
         Find the window at a given point (x, y) from a list of windows.
@@ -26,10 +30,23 @@ class WindowManager(ABC):
             dict | None: The window dictionary at the given point, or None if not found.
         """
         for w in windows:
-            left, top, right, bottom = w["rect"]
-            if left <= x <= right and top <= y <= bottom:
+            if self._point_in_rect(x, y, w["rect"]):
                 return w
         return None
+
+    def windows_at_point(self, x: int, y: int, windows: list[dict]) -> list[dict]:
+        """
+        Find all windows at a given point (x, y) from a list of windows.
+
+        Args:
+            x (int): The x-coordinate of the point.
+            y (int): The y-coordinate of the point.
+            windows (list[dict]): A list of window dictionaries with "rect" keys.
+
+        Returns:
+            list[dict]: The list of all window dictionaries at the given point.
+        """
+        return [w for w in windows if self._point_in_rect(x, y, w["rect"])]
 
     @abstractmethod
     def focus_window(self, window: dict) -> None:

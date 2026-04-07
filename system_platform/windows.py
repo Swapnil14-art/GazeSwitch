@@ -13,7 +13,13 @@ logger = logging.getLogger(__name__)
 
 
 class WindowsWindowManager(WindowManager):
-    windows_to_exclude = ["Windows Input Experience", "Rainmeter", "Program Manager"]
+    windows_to_exclude = [
+        "Windows Input Experience",
+        "Rainmeter",
+        "Program Manager",
+        "New notification",
+        "System tray overflow window",
+    ]
 
     def get_windows(self) -> list[dict]:
         windows = []

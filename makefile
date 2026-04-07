@@ -1,6 +1,6 @@
-SRC = trackers evaluation tests core system_platform ui main.py 
+SRC = trackers tests core system_platform ui main.py 
 
-.PHONY: all format lint check run-eval test_metrics
+.PHONY: all format lint check
 
 all: check
 
@@ -16,10 +16,6 @@ lint:
 test:
 	@echo Running tests...
 	@python -m pytest -p no:warnings tests/
-
-run-eval:
-	@echo Running evaluation...
-	@python -m evaluation.run_evaluation $(ARGS)
 
 check: format lint test
 

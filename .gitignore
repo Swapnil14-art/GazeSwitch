@@ -6,9 +6,6 @@ __pycache__/
 # Environments
 venv/
 
-# Evaluation logs and results
-evaluation/data/
-
 # Build and distribution files
 build/
 dist/
