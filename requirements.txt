@@ -18,12 +18,3 @@ pyinstaller; sys_platform == "win32"
 notify2; sys_platform == "linux"
 dbus-python; sys_platform == "linux"
 pyudev; sys_platform == "linux"
-# sudo apt install -y \
-#     python3 python3-venv \
-#     python3-opencv \
-#     python3-gi \
-#     python3-pystray \
-#     libayatana-appindicator3-1
-# python3 -m venv --system-site-packages venv
-# pip install -r requirements.txt
-# pip uninstall opencv-python opencv-contrib-python
