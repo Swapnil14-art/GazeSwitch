@@ -35,14 +35,14 @@ class LinuxWindowManager(WindowManager):
 
     def _get_absolute_geometry(self, hwnd) -> tuple[int, int, int, int]:
         """
-        Returns (x, y, width, height) of a window in absolute screen coordinates.
+        Returns (left, top, right, bottom) of a window in absolute screen coordinates.
 
         Args:
             hwnd: X11 window object
 
         Returns:
-            tuple[int, int, int, int]: A tuple (x, y, width, height) representing
-            the window's absolute position and size on the screen.
+            tuple[int, int, int, int]: A tuple (left, top, right, bottom) representing
+            the window's absolute position on the screen.
         """
         try:
             # Get window geometry (client area)
@@ -58,18 +58,6 @@ class LinuxWindowManager(WindowManager):
                 if parent.id == self.disp.screen().root.id:
                     break
                 parent = parent.query_tree().parent
-
-            # Include frame extents (decorations like borders and title bar)
-            try:
-                extents = self.ewmh.getFrameExtents(hwnd)
-                if extents:
-                    x -= extents.left
-                    y -= extents.top
-                    w += extents.left + extents.right
-                    h += extents.top + extents.bottom
-            except Exception:
-                # Some windows might not have frame extents
-                pass
 
             return x, y, x + w, y + h
         except Exception as e:
