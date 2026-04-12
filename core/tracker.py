@@ -420,8 +420,8 @@ class GazeTracker:
         Starts the calibration process.
         """
         logger.info("Starting calibration")
-        for monitor_id, estimator in self.estimators.items():
-            estimator.calibrate(self.current_camera, monitor_id)
+        for _, estimator in self.estimators.items():
+            estimator.calibrate(self.current_camera)
         logger.info("Calibration finished")
 
     def start_tracking(self):
