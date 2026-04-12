@@ -29,7 +29,7 @@ class BaseTracker(ABC):
         pass
 
     @abstractmethod
-    def preload_camera(self, device_index: int):
+    def preload_camera(self):
         """
         Optional: warm up the camera so tracking can start instantly.
         Default does nothing.
@@ -43,7 +43,7 @@ class BaseTracker(ABC):
         """
 
     @abstractmethod
-    def start(self, device_index: int):
+    def start(self):
         """
         Start tracking (open camera / start sampling).
         """
@@ -58,15 +58,6 @@ class BaseTracker(ABC):
     def release_camera(self):
         """
         Release the camera resource if it's currently held.
-        """
-
-    @abstractmethod
-    def set_video_device(self, device_index: int):
-        """
-        Set the video device by its index.
-
-        Args:
-            device_index (int): The index of the video device to use.
         """
 
     @abstractmethod

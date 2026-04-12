@@ -99,7 +99,11 @@ def create_tray_icon(tracker: GazeTracker) -> None:
             "Release Camera",
             lambda icon, item: tracker.release_camera(),
             enabled=lambda item: (
-                not tracker.running and tracker.estimator.is_camera_ready(),  # type: ignore
+                not tracker.running
+                and all(
+                    estimator.is_camera_ready()
+                    for estimator in tracker.estimators.values()
+                )  # type: ignore
             ),
         ),
         item("Calibrate", lambda icon, item: tracker.calibrate()),

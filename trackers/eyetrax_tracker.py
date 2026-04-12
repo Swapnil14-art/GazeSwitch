@@ -2,7 +2,6 @@ import os
 import time
 from typing import Any
 
-import cv2
 from eyetrax import GazeEstimator, run_9_point_calibration
 
 from system_platform.utils import get_model_dir
@@ -10,12 +9,12 @@ from trackers.base_tracker import BaseTracker
 
 
 class EyeTraxWrapper(BaseTracker):
-    def __init__(self, calibration_mode: str = "", model_dir: str = get_model_dir()):
+    def __init__(self, cap, monitor_index: int = 0, model_dir: str = get_model_dir()):
         self.tracker = GazeEstimator()
-        self.cap = None
+        self.cap = cap
+        self.monitor_index = monitor_index
 
-        self.model_suffix = f"_{calibration_mode}" if calibration_mode else ""
-        self.model_path = f"{model_dir}/gaze_model{self.model_suffix}.pkl"
+        self.model_path = f"{model_dir}/gaze_model_{monitor_index}.pkl"
 
         self.model_loaded = False
 
@@ -30,33 +29,22 @@ class EyeTraxWrapper(BaseTracker):
             self.tracker.load_model(self.model_path)
             self.model_loaded = True
 
-    def preload_camera(self, device_index: int):
+    def preload_camera(self):
         if not self.is_camera_ready():
-            cap = cv2.VideoCapture(device_index)
-
             for _ in range(3):
-                cap.read()
+                self.cap.read()  # type: ignore
                 time.sleep(0.01)
 
-            self.cap = cap
-
     def calibrate(self, device_index: int):
-        run_9_point_calibration(self.tracker, device_index)
+        run_9_point_calibration(self.tracker, device_index, self.monitor_index)
         self.tracker.save_model(self.model_path)
         self.model_loaded = True
 
-    def start(self, device_index: int):
+    def start(self):
         if not self.model_loaded:
             self.preload_model()
 
-        self.preload_camera(device_index)
-
-    def set_video_device(self, device_index: int):
-        if self.cap is not None:
-            self.cap.release()
-            self.cap = None
-
-        self.preload_camera(device_index)
+        self.preload_camera()
 
     def get_data(self) -> dict[str, Any]:
         if not self.is_camera_ready():
