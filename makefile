@@ -28,7 +28,6 @@ endif
 build:
 	@echo Building exe/app...
 ifeq ($(OS),Windows_NT)
-	@ # Windows
 	@pyinstaller --clean --noconsole --onefile \
 		--hidden-import=eyetrax.gaze \
 		--hidden-import=eyetrax.calibration \
