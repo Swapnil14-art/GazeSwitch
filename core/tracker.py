@@ -43,37 +43,57 @@ class GazeTracker:
 
         # Window manager integration
         self.wm = window_manager
-        camera_name = self.config.get("camera_name", "")
-        self.current_camera = self.wm.list_video_devices().get(
-            camera_name, DEFAULT_CAMERA_INDEX
-        )
-        self.cap = cv2.VideoCapture(self.current_camera)
 
-        # Screen geometry
-        self.monitors = get_monitors()
-
-        self.virtual_left = min(m.x for m in self.monitors)
-        self.virtual_top = min(m.y for m in self.monitors)
-        self.virtual_right = max(m.x + m.width for m in self.monitors)
-        self.virtual_bottom = max(m.y + m.height for m in self.monitors)
-
+        # Monitor and camera configuration
+        monitors = get_monitors()
         self.monitor_rects = [
             {
                 "id": i,
+                "name": m.name,
                 "left": m.x,
                 "top": m.y,
                 "right": m.x + m.width,
                 "bottom": m.y + m.height,
             }
-            for i, m in enumerate(self.monitors)
+            for i, m in enumerate(monitors)
         ]
+
+        self.monitor_camera_mapping = self.config.get("monitor_camera_mapping", {})
+        if not self.monitor_camera_mapping:
+            self.monitor_camera_mapping = {
+                monitor["id"]: {"enabled": True, "camera_index": DEFAULT_CAMERA_INDEX}
+                for monitor in self.monitor_rects
+            }
+            self.config["monitor_camera_mapping"] = self.monitor_camera_mapping
+            save_config(self.config)
+
+        unique_cameras = {
+            config["camera_index"] for config in self.monitor_camera_mapping.values()
+        }
+        self.camera_cap_mapping = {
+            camera_index: cv2.VideoCapture(camera_index)
+            for camera_index in unique_cameras
+        }
+
+        self.virtual_left = min(m.x for m in monitors)
+        self.virtual_top = min(m.y for m in monitors)
+        self.virtual_right = max(m.x + m.width for m in monitors)
+        self.virtual_bottom = max(m.y + m.height for m in monitors)
+        self.virtual_width = self.virtual_right - self.virtual_left
+        self.virtual_height = self.virtual_bottom - self.virtual_top
 
         # Gaze trackers
         self.estimators: dict[int, BaseTracker] = {}
 
-        for monitor in self.monitor_rects:
-            monitor_id = monitor["id"]
-            estimator = EyeTraxWrapper(cap=self.cap, monitor_index=monitor_id)
+        for monitor_id, config in self.monitor_camera_mapping.items():
+            enabled = config.get("enabled", True)
+            camera_index = config.get("camera_index", DEFAULT_CAMERA_INDEX)
+            cap = self.camera_cap_mapping.get(camera_index)
+
+            if not enabled:
+                continue
+
+            estimator = EyeTraxWrapper(cap=cap, monitor_index=monitor_id)
 
             if estimator.is_ready():
                 Thread(
@@ -356,6 +376,73 @@ class GazeTracker:
 
         logger.debug(f"Adaptive dwell saved: {dwell:.2f}s")
 
+    def update_monitor_camera_mapping(self, monitor_camera_mapping: dict[int, dict]):
+        """
+        Update the monitor-camera mapping configuration.
+
+        Args:
+            monitor_camera_mapping (dict[int, dict]): A dictionary mapping monitor
+            IDs to their configurations.
+        """
+        # Set up new cameras
+        for monitor_id, config in monitor_camera_mapping.items():
+            enabled = config.get("enabled")
+            camera_index = config.get("camera_index")
+
+            if (
+                enabled
+                and camera_index is not None
+                and camera_index not in self.camera_cap_mapping
+            ):
+                self.camera_cap_mapping[camera_index] = cv2.VideoCapture(camera_index)
+
+        # Update estimators
+        for monitor_id, config in monitor_camera_mapping.items():
+            enabled = config.get("enabled")
+            camera_index = config.get("camera_index")
+
+            estimator_exists = monitor_id in self.estimators
+
+            if enabled:
+                # Case 1: Monitor newly enabled (no estimator yet)
+                if not estimator_exists:
+                    cap = self.camera_cap_mapping.get(camera_index)
+                    estimator = EyeTraxWrapper(cap=cap, monitor_index=monitor_id)
+                    self.estimators[monitor_id] = estimator
+                else:
+                    # Case 2: Monitor stays enabled, but camera might have changed
+                    old_camera_index = self.monitor_camera_mapping[monitor_id].get(
+                        "camera_index"
+                    )
+                    if camera_index != old_camera_index:
+                        # Camera changed - update the estimator's camera reference
+                        cap = self.camera_cap_mapping.get(camera_index)
+                        self.estimators[monitor_id].cap = cap  # type: ignore
+            else:
+                # Case 3: Monitor now disabled
+                if estimator_exists:
+                    del self.estimators[monitor_id]
+
+        # Update local state and persist
+        self.monitor_camera_mapping.update(monitor_camera_mapping)
+        self.config["monitor_camera_mapping"] = self.monitor_camera_mapping
+        save_config(self.config)
+
+        # Clean up unused cameras
+        enabled_cameras = {
+            config["camera_index"]
+            for config in self.monitor_camera_mapping.values()
+            if config.get("enabled") and config.get("camera_index") is not None
+        }
+        cleaned = []
+        for camera_index in list(self.camera_cap_mapping.keys()):
+            if camera_index not in enabled_cameras:
+                self.release_camera(camera_index)
+                cleaned.append(camera_index)
+
+        if cleaned:
+            logger.info(f"Cleaned up unused cameras: {cleaned}")
+
     def update_manual_override_hotkey(self, hotkey: str):
         """
         Update the manual override hotkey.
@@ -392,36 +479,14 @@ class GazeTracker:
         self._start_hotkey_listener()
         logger.info(f"{action} hotkey set to {hotkey}")
 
-    def set_video_device(self, device_index: int):
-        """
-        Set the video device for the tracker.
-        """
-        if device_index == self.current_camera:
-            return
-
-        self.current_camera = device_index
-        self.config["camera_name"] = list(self.wm.list_video_devices().keys())[
-            device_index
-        ]
-        save_config(self.config)
-
-        if self.cap is not None:
-            self.cap.release()
-            self.cap = None
-
-        self.cap = cv2.VideoCapture(self.current_camera)
-        for estimator in self.estimators.values():
-            estimator.cap = self.cap  # type: ignore
-
-        logger.info(f"Video device set to {device_index}")
-
     def calibrate(self, icon=None, _=None):
         """
         Starts the calibration process.
         """
         logger.info("Starting calibration")
-        for _, estimator in self.estimators.items():
-            estimator.calibrate(self.current_camera)
+        for monitor_id, estimator in self.estimators.items():
+            camera_index = self.monitor_camera_mapping[monitor_id]["camera_index"]
+            estimator.calibrate(camera_index)
         logger.info("Calibration finished")
 
     def start_tracking(self):
@@ -452,7 +517,7 @@ class GazeTracker:
         self.running = False
         logger.info("Tracking stopped")
 
-    def release_camera(self):
+    def release_camera(self, camera_index: int):
         """
         Release the camera resource.
         """
@@ -461,11 +526,14 @@ class GazeTracker:
             logger.warning("Cannot release camera while tracking")
             return
 
-        if self.cap is not None:
-            self.cap.release()
-            self.cap = None
-            self.wm.notify("Camera released")
-            logger.info("Camera released")
+        if camera_index not in self.camera_cap_mapping:
+            logger.debug(f"Camera {camera_index} not in use, no need to release")
+            return
+
+        self.camera_cap_mapping[camera_index].release()
+        del self.camera_cap_mapping[camera_index]
+        self.wm.notify("Camera released")
+        logger.info("Camera released")
 
     def _run_tracker_step(self):
         """

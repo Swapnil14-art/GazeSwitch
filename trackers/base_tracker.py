@@ -55,12 +55,6 @@ class BaseTracker(ABC):
         """
 
     @abstractmethod
-    def release_camera(self):
-        """
-        Release the camera resource if it's currently held.
-        """
-
-    @abstractmethod
     def get_data(self) -> Dict[str, Any]:
         """
         Get the current gaze data from the tracker in the format:

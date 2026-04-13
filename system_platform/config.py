@@ -18,12 +18,20 @@ def load_config() -> dict[str, Any]:
 
     try:
         with open(CONFIG_FILE, "r") as f:
-            return json.load(f)
+            config = json.load(f)
+
+            # Convert string monitor IDs back to integers
+            if "monitor_camera_mapping" in config:
+                config["monitor_camera_mapping"] = {
+                    int(k): v for k, v in config["monitor_camera_mapping"].items()
+                }
+
+            return config
     except Exception:
         return {}
 
 
-def save_config(config: dict[str, str]) -> None:
+def save_config(config: dict[str, Any]) -> None:
     """
     Save configuration to the config file.
 
