@@ -37,7 +37,7 @@ The system combines advanced eye-tracking algorithms with adaptive learning to p
 - **Real-time Gaze Tracking**: Continuous eye-movement detection using webcam video
 - **Automatic Window Focusing**: Smart window focus based on gaze position
 - **Multi-camera Support**: Works with various USB cameras and built-in webcams
-- **Cross-platform**: Runs on Windows andLinux -->
+- **Cross-platform**: Runs on Windows and Linux
 
 ### Intelligent Control
 - **Adaptive Dwell Learning**: The system automatically adjusts dwell time based on your behaviour:
