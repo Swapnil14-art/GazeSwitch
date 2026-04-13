@@ -7,7 +7,7 @@ A gaze-tracking application that enables eye-gaze-based window focusing and cont
 - [Overview](#overview)
 - [Features](#features)
 - [How It Works](#how-it-works)
-- [System Requirements](#system-requirements)
+<!-- - [System Requirements](#system-requirements) -->
 - [Installation](#installation)
 - [Getting Started](#getting-started)
 - [Configuration](#configuration)
@@ -16,7 +16,7 @@ A gaze-tracking application that enables eye-gaze-based window focusing and cont
   - [Camera Selection](#camera-selection)
   - [Adaptive Dwell Learning](#adaptive-dwell-learning)
 - [Usage Guide](#usage-guide)
-- [Supported Platforms](#supported-platforms)
+<!-- - [Supported Platforms](#supported-platforms) -->
 - [Troubleshooting](#troubleshooting)
 - [Advanced Configuration](#advanced-configuration)
 
