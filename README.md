@@ -127,7 +127,7 @@ If you have a compiled executable, simply run `GazeControl.exe`.
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/Maciek03102003/GazeControl.git
+   git clone https://github.com/maciejrytlewski/GazeControl.git
    cd GazeControl
    ```
 
@@ -162,7 +162,7 @@ If you have a compiled executable, simply run `GazeControl.exe`.
 
 2. **Clone the repository**:
    ```bash
-   git clone https://github.com/Maciek03102003/GazeControl.git
+   git clone https://github.com/maciejrytlewski/GazeControl.git
    cd GazeControl
    ```
 
