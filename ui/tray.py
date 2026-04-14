@@ -118,7 +118,7 @@ def open_config_window(tracker: GazeTracker, root: tk.Tk):
 
     # Icon
     icon_path = resource_path("media/icon_black.png")
-    tk_img = tk.PhotoImage(icon_path)
+    tk_img = tk.PhotoImage(file=icon_path)
     window.iconphoto(False, tk_img)
 
     window.transient()
