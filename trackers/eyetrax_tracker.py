@@ -19,7 +19,16 @@ class EyeTraxWrapper(BaseTracker):
         self.model_loaded = False
 
     def is_ready(self) -> bool:
-        return os.path.exists(self.model_path)
+        if not os.path.exists(self.model_path):
+            return False
+
+        if not os.path.isfile(self.model_path):
+            return False
+
+        if os.path.getsize(self.model_path) == 0:
+            return False
+
+        return True
 
     def is_camera_ready(self) -> bool:
         return self.cap is not None and self.cap.isOpened()

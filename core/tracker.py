@@ -82,6 +82,8 @@ class GazeTracker:
         self.virtual_width = self.virtual_right - self.virtual_left
         self.virtual_height = self.virtual_bottom - self.virtual_top
 
+        self._last_monitor_check = time.time()
+
         # Gaze trackers
         self.estimators: dict[int, BaseTracker] = {}
 
@@ -535,12 +537,71 @@ class GazeTracker:
         self.wm.notify("Camera released")
         logger.info("Camera released")
 
+    def _refresh_monitors(self) -> None:
+        """
+        Detect and handle monitor changes at runtime.
+        """
+        current_monitors = get_monitors()
+        current_count = len(current_monitors)
+
+        if current_count != len(self.monitor_rects):
+            logger.info(
+                f"Monitor count changed from {len(self.monitor_rects)} to "
+                f"{current_count}"
+            )
+
+            # Rebuild monitor list
+            self.monitor_rects = [
+                {
+                    "id": i,
+                    "name": m.name,
+                    "left": m.x,
+                    "top": m.y,
+                    "right": m.x + m.width,
+                    "bottom": m.y + m.height,
+                }
+                for i, m in enumerate(current_monitors)
+            ]
+
+            # Recalculate virtual desktop bounds
+            self.virtual_left = min(m.x for m in current_monitors)
+            self.virtual_top = min(m.y for m in current_monitors)
+            self.virtual_right = max(m.x + m.width for m in current_monitors)
+            self.virtual_bottom = max(m.y + m.height for m in current_monitors)
+            self.virtual_width = self.virtual_right - self.virtual_left
+            self.virtual_height = self.virtual_bottom - self.virtual_top
+
+    def _get_monitor_at_position(self, x: int, y: int) -> dict | None:
+        """
+        Find which monitor contains the given screen coordinates.
+
+        Args:
+            x (int): X coordinate of the screen position in virtual desktop space.
+            y (int): Y coordinate of the screen position in virtual desktop space.
+
+        Returns:
+            dict | None: The monitor dictionary containing the position, or None if
+            no monitor contains it.
+        """
+        for monitor in self.monitor_rects:
+            if (
+                monitor["left"] <= x <= monitor["right"]
+                and monitor["top"] <= y <= monitor["bottom"]
+            ):
+                return monitor
+        return None
+
     def _run_tracker_step(self):
         """
         Helper function to run a single iteration of the main
         tracking loop.
         """
         now = time.time()
+
+        # Periodically check for monitor changes every 10 seconds
+        if now - self._last_monitor_check > 10:
+            self._refresh_monitors()
+            self._last_monitor_check = now
 
         # Detect a successful auto-focus.
         # If the user stayed in the focused window long enough without correcting it,
@@ -565,15 +626,22 @@ class GazeTracker:
         # Keep current_window in sync with OS focus
         self._sync_focused_window()
 
-        # Try each estimator until one gives valid gaze coordinates
+        # Try each estimator and use the one where gaze falls within the monitor bounds
         x = y = None
         for monitor_id, estimator in self.estimators.items():
             monitor = self.monitor_rects[monitor_id]
             data = estimator.get_data()
             gx, gy = data["gaze"]["x"], data["gaze"]["y"]
             if gx is not None and gy is not None:
-                x, y = gx + monitor["left"], gy + monitor["top"]
-                break
+                x_virt, y_virt = gx + monitor["left"], gy + monitor["top"]
+
+                # Only use this gaze data if it falls within this monitor's bounds
+                if (
+                    monitor["left"] <= x_virt <= monitor["right"]
+                    and monitor["top"] <= y_virt <= monitor["bottom"]
+                ):
+                    x, y = x_virt, y_virt
+                    break
 
         # Determine if the user is actively typing or not
         typing_idle = (now - self.last_keystroke_time) >= TYPING_IDLE_TIME
@@ -583,13 +651,15 @@ class GazeTracker:
         elif self._tracker_intent_idle_since == 0.0:
             self._tracker_intent_idle_since = now
 
-        if (
-            x is not None
-            and y is not None
-            and self.virtual_left < x < self.virtual_right
-            and self.virtual_top < y < self.virtual_bottom
-        ):
-            logger.debug(f"Predicted gaze at: ({x}, {y})")
+        if x is not None and y is not None:
+            # Check if gaze falls within any actual monitor's bounds
+            monitor = self._get_monitor_at_position(int(x), int(y))
+            if not monitor:
+                # Gaze is outside of all monitors (off-screen or in monitor gap)
+                logger.debug(f"Gaze at ({x}, {y}) is outside all monitors - skipping")
+                return
+
+            logger.debug(f"Predicted gaze at: ({x}, {y}) on monitor {monitor['id']}")
             windows = self.wm.get_windows()
 
             # Cycling is handled immediately and independently of the normal

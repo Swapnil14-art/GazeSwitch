@@ -1,9 +1,12 @@
 import json
+import logging
 from typing import Any
 
 from system_platform.utils import get_app_data_dir
 
 CONFIG_FILE = get_app_data_dir() / "config.json"
+
+logger = logging.getLogger(__name__)
 
 
 def load_config() -> dict[str, Any]:
@@ -22,12 +25,19 @@ def load_config() -> dict[str, Any]:
 
             # Convert string monitor IDs back to integers
             if "monitor_camera_mapping" in config:
-                config["monitor_camera_mapping"] = {
-                    int(k): v for k, v in config["monitor_camera_mapping"].items()
-                }
+                try:
+                    config["monitor_camera_mapping"] = {
+                        int(k): v for k, v in config["monitor_camera_mapping"].items()
+                    }
+                except (ValueError, TypeError) as e:
+                    logger.warning(
+                        f"Invalid monitor IDs in config: {e}. Using default config."
+                    )
+                    return {}
 
             return config
-    except Exception:
+    except Exception as e:
+        logger.error(f"Failed to load config: {e}. Using default config.")
         return {}
 
 
