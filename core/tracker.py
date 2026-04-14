@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 from threading import Thread
 
@@ -83,6 +84,9 @@ class GazeTracker:
         self.hotkey_listener = None
         self._start_hotkey_listener()
 
+        # Thread-safe state lock for flags accessed by hotkey listeners
+        self._hotkey_state_lock = threading.Lock()
+
         # Cycling state for overlapping windows.
         # We freeze the initial window stack so cycling remains deterministic
         # even though focusing windows changes the OS Z-order.
@@ -145,7 +149,8 @@ class GazeTracker:
         Triggers an immediate focus on the current gaze target,
         bypassing dwell/idle checks.
         """
-        self.manual_override_triggered = True
+        with self._hotkey_state_lock:
+            self.manual_override_triggered = True
         logger.info("Manual override triggered")
 
         # Regret event - User used manual override shortly after
@@ -173,14 +178,16 @@ class GazeTracker:
         """
         Cycle through all windows under the gaze point.
         """
-        self.cycle_forward_triggered = True
+        with self._hotkey_state_lock:
+            self.cycle_forward_triggered = True
         logger.info("Cycle windows hotkey triggered")
 
     def _cycle_windows_reverse(self):
         """
         Cycle through all windows under the gaze point in reverse.
         """
-        self.cycle_reverse_triggered = True
+        with self._hotkey_state_lock:
+            self.cycle_reverse_triggered = True
         logger.info("Reverse cycle windows hotkey triggered")
 
     def _cycle_windows_at_gaze(
@@ -493,19 +500,26 @@ class GazeTracker:
 
             # Cycling is handled immediately and independently of the normal
             # dwell/intent logic because it is an explicit user action.
-            if self.cycle_forward_triggered or self.cycle_reverse_triggered:
-                reverse = self.cycle_reverse_triggered
-                self._cycle_windows_at_gaze(int(x), int(y), windows, reverse=reverse)
+            with self._hotkey_state_lock:
+                cycle_triggered = (
+                    self.cycle_forward_triggered or self.cycle_reverse_triggered
+                )
 
-                self.cycle_forward_triggered = False
-                self.cycle_reverse_triggered = False
+                if cycle_triggered:
+                    reverse = self.cycle_reverse_triggered
+                    self._cycle_windows_at_gaze(
+                        int(x), int(y), windows, reverse=reverse
+                    )
 
-                # Skip the rest of the gaze intent logic this frame to avoid the
-                # dwell-based focusing logic triggering immediately after cycling.
-                # Cycling is an explicit user action and should not be followed by
-                # automatic focus logic in the same iteration.
-                time.sleep(POLL_INTERVAL)
-                return
+                    self.cycle_forward_triggered = False
+                    self.cycle_reverse_triggered = False
+
+                    # Skip the rest of the gaze intent logic this frame to avoid the
+                    # dwell-based focusing logic triggering immediately after cycling.
+                    # Cycling is an explicit user action and should not be followed by
+                    # automatic focus logic in the same iteration.
+                    time.sleep(POLL_INTERVAL)
+                    return
 
             target_window = self.wm.window_at_point(int(x), int(y), windows)
 
@@ -536,7 +550,10 @@ class GazeTracker:
                     f"threshold={dwell_threshold:.2f}"
                 )
 
-                if self.manual_override_triggered or (
+                with self._hotkey_state_lock:
+                    manual_override = self.manual_override_triggered
+
+                if manual_override or (
                     gaze_dwell >= dwell_threshold
                     and intent_idle >= TYPING_IDLE_TIME
                     and (
@@ -566,7 +583,8 @@ class GazeTracker:
                     # Reset to prevent immediate re-trigger
                     self._tracker_gaze_dwell_start = now
                     self._tracker_intent_idle_since = now
-                    self.manual_override_triggered = False
+                    with self._hotkey_state_lock:
+                        self.manual_override_triggered = False
             else:
                 # No window detected, reset gaze dwell
                 self._tracker_last_target = None

@@ -1,9 +1,11 @@
 import json
+import threading
 from typing import Any
 
 from system_platform.utils import get_app_data_dir
 
 CONFIG_FILE = get_app_data_dir() / "config.json"
+_save_lock = threading.Lock()
 
 
 def load_config() -> dict[str, Any]:
@@ -30,7 +32,8 @@ def save_config(config: dict[str, str]) -> None:
     Args:
         config (dict[str, str]): The configuration dictionary to save.
     """
-    get_app_data_dir().mkdir(parents=True, exist_ok=True)
+    with _save_lock:
+        get_app_data_dir().mkdir(parents=True, exist_ok=True)
 
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(config, f, indent=2)
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(config, f, indent=2)
