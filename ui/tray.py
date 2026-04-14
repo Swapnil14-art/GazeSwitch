@@ -241,6 +241,7 @@ def open_config_window(tracker: GazeTracker, root: tk.Tk):
     # Map index to name
     index_to_name = {v: k for k, v in cameras.items()}
 
+    camera_states = []
     for row, cam_idx in enumerate(sorted(used_camera_indexes)):
         cam_name = index_to_name.get(cam_idx, f"Camera {cam_idx}")
 
@@ -255,6 +256,7 @@ def open_config_window(tracker: GazeTracker, root: tk.Tk):
             command=lambda idx=cam_idx: tracker.release_camera(idx),
             state=state,
         ).grid(row=row, column=1, padx=5)
+        camera_states.append(state)
 
     def save():
         monitor_config = {}
@@ -287,14 +289,13 @@ def open_config_window(tracker: GazeTracker, root: tk.Tk):
     ttk.Button(button_frame, text="Save", command=save).pack(side="right")
 
     # Release all button if there are any used cameras
-    if used_camera_indexes:
-        ttk.Button(
-            button_frame,
-            text="Release All",
-            command=lambda: [
-                tracker.release_camera(idx) for idx in used_camera_indexes
-            ],
-        ).pack(side="left")
+    state = "normal" if any(s == "normal" for s in camera_states) else "disabled"
+    ttk.Button(
+        button_frame,
+        text="Release All",
+        command=lambda: [tracker.release_camera(idx) for idx in used_camera_indexes],
+        state=state,
+    ).pack(side="left")
 
     # Adjust window size to fit content
     window.update_idletasks()

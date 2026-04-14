@@ -552,7 +552,6 @@ class GazeTracker:
 
         self.camera_cap_mapping[camera_index].release()
         del self.camera_cap_mapping[camera_index]
-        self.wm.notify("Camera released")
         logger.info("Camera released")
 
     def _refresh_monitors(self) -> None:
