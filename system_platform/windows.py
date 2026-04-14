@@ -46,7 +46,7 @@ class WindowsWindowManager(WindowManager):
             shell.SendKeys("%")
             win32gui.SetForegroundWindow(window["hwnd"])
         except Exception as e:
-            print(f"Could not focus window: {e}")
+            logger.exception(f"Could not focus window: {e}")
 
     def get_screen_size(self) -> tuple[int, int]:
         return win32api.GetSystemMetrics(0), win32api.GetSystemMetrics(1)

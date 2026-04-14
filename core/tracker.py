@@ -416,6 +416,30 @@ class GazeTracker:
         self.wm.notify("Camera released")
         logger.info("Camera released")
 
+    def shutdown(self):
+        """
+        Shutdown the tracker by stopping tracking and releasing resources.
+        """
+        self.stop_tracking()
+
+        if self.keyboard_listener:
+            try:
+                self.keyboard_listener.stop()
+                logger.info("Keyboard listener stopped")
+            except Exception as e:
+                logger.exception(f"Error stopping keyboard listener: {e}")
+
+        if self.hotkey_listener:
+            try:
+                self.hotkey_listener.stop()
+                logger.info("Hotkey listener stopped")
+            except Exception as e:
+                logger.exception(f"Error stopping hotkey listener: {e}")
+
+        self.release_camera()
+
+        logger.info("Tracker shutdown complete")
+
     def _run_tracker_step(self):
         """
         Helper function to run a single iteration of the main

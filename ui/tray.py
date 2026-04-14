@@ -162,6 +162,5 @@ def exit_app(icon, _, tracker: GazeTracker):
     """
     Exit the application by stopping tracking and the tray icon.
     """
-    tracker.stop_tracking()
-    tracker.release_camera()
+    tracker.shutdown()
     icon.stop()
