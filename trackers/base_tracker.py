@@ -1,11 +1,15 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict
 
+import cv2
+
 
 class BaseTracker(ABC):
     """
     Abstract base for gaze tracking backends.
     """
+
+    cap: cv2.VideoCapture | None = None
 
     @abstractmethod
     def is_ready(self) -> bool:

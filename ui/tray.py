@@ -6,7 +6,7 @@ from functools import partial
 from tkinter import ttk
 
 import pystray
-from PIL import Image, ImageTk
+from PIL import Image
 from pystray import MenuItem as item
 
 from core.tracker import GazeTracker
@@ -118,9 +118,8 @@ def open_config_window(tracker: GazeTracker, root: tk.Tk):
 
     # Icon
     icon_path = resource_path("media/icon_black.png")
-    img = Image.open(icon_path)
-    tk_img = ImageTk.PhotoImage(img)
-    window.iconphoto(False, tk_img)  # type: ignore
+    tk_img = tk.PhotoImage(icon_path)
+    window.iconphoto(False, tk_img)
 
     window.transient()
     window.grab_set()

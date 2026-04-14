@@ -2,6 +2,7 @@ import os
 import time
 from typing import Any
 
+import cv2
 from eyetrax import GazeEstimator, run_9_point_calibration
 
 from system_platform.utils import get_model_dir
@@ -9,7 +10,12 @@ from trackers.base_tracker import BaseTracker
 
 
 class EyeTraxWrapper(BaseTracker):
-    def __init__(self, cap, monitor_index: int = 0, model_dir: str = get_model_dir()):
+    def __init__(
+        self,
+        cap: cv2.VideoCapture,
+        monitor_index: int = 0,
+        model_dir: str = get_model_dir(),
+    ):
         self.tracker = GazeEstimator()
         self.cap = cap
         self.monitor_index = monitor_index
@@ -39,9 +45,12 @@ class EyeTraxWrapper(BaseTracker):
             self.model_loaded = True
 
     def preload_camera(self):
+        if not self.cap:
+            return
+
         if not self.is_camera_ready():
             for _ in range(3):
-                self.cap.read()  # type: ignore
+                self.cap.read()
                 time.sleep(0.01)
 
     def calibrate(self, device_index: int):
@@ -59,7 +68,10 @@ class EyeTraxWrapper(BaseTracker):
         if not self.is_camera_ready():
             raise RuntimeError("Camera not started")
 
-        _, frame = self.cap.read()  # type: ignore
+        if not self.cap:
+            raise RuntimeError("Camera not initialised")
+
+        _, frame = self.cap.read()
         features, blink = self.tracker.extract_features(frame)
         x, y = (
             self.tracker.predict([features])[0]

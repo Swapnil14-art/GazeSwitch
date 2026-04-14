@@ -18,6 +18,7 @@ DWELL_TIME = 0.5  # seconds
 TYPING_IDLE_TIME = 1.0  # seconds
 POLL_INTERVAL = 0.05  # seconds
 CYCLE_RESET_TIME = 1.5  # seconds
+MONITOR_CHECK_INTERVAL = 10.0  # seconds
 DEFAULT_CAMERA_INDEX = 0
 DEFAULT_MANUAL_OVERRIDE_HOTKEY = "<alt>+\\"
 DEFAULT_CYCLE_WINDOWS_HOTKEY = "<alt>+]"
@@ -58,7 +59,9 @@ class GazeTracker:
             for i, m in enumerate(monitors)
         ]
 
-        self.monitor_camera_mapping = self.config.get("monitor_camera_mapping", {})
+        self.monitor_camera_mapping: dict[int, dict[str, bool | int]] = self.config.get(
+            "monitor_camera_mapping", {}
+        )
         if not self.monitor_camera_mapping:
             self.monitor_camera_mapping = {
                 monitor["id"]: {"enabled": True, "camera_index": DEFAULT_CAMERA_INDEX}
@@ -93,6 +96,13 @@ class GazeTracker:
             cap = self.camera_cap_mapping.get(camera_index)
 
             if not enabled:
+                continue
+
+            if not cap:
+                logger.warning(
+                    f"Camera {camera_index} not available for monitor "
+                    f"{monitor_id}, skipping estimator creation"
+                )
                 continue
 
             estimator = EyeTraxWrapper(cap=cap, monitor_index=monitor_id)
@@ -378,7 +388,9 @@ class GazeTracker:
 
         logger.debug(f"Adaptive dwell saved: {dwell:.2f}s")
 
-    def update_monitor_camera_mapping(self, monitor_camera_mapping: dict[int, dict]):
+    def update_monitor_camera_mapping(
+        self, monitor_camera_mapping: dict[int, dict[str, bool | int]]
+    ):
         """
         Update the monitor-camera mapping configuration.
 
@@ -401,7 +413,7 @@ class GazeTracker:
         # Update estimators
         for monitor_id, config in monitor_camera_mapping.items():
             enabled = config.get("enabled")
-            camera_index = config.get("camera_index")
+            camera_index = config.get("camera_index", DEFAULT_CAMERA_INDEX)
 
             estimator_exists = monitor_id in self.estimators
 
@@ -409,6 +421,12 @@ class GazeTracker:
                 # Case 1: Monitor newly enabled (no estimator yet)
                 if not estimator_exists:
                     cap = self.camera_cap_mapping.get(camera_index)
+                    if not cap:
+                        logger.warning(
+                            f"Camera {camera_index} not available for monitor "
+                            f"{monitor_id}, skipping estimator creation"
+                        )
+                        continue
                     estimator = EyeTraxWrapper(cap=cap, monitor_index=monitor_id)
                     self.estimators[monitor_id] = estimator
                 else:
@@ -419,7 +437,7 @@ class GazeTracker:
                     if camera_index != old_camera_index:
                         # Camera changed - update the estimator's camera reference
                         cap = self.camera_cap_mapping.get(camera_index)
-                        self.estimators[monitor_id].cap = cap  # type: ignore
+                        self.estimators[monitor_id].cap = cap
             else:
                 # Case 3: Monitor now disabled
                 if estimator_exists:
@@ -599,7 +617,7 @@ class GazeTracker:
         now = time.time()
 
         # Periodically check for monitor changes every 10 seconds
-        if now - self._last_monitor_check > 10:
+        if now - self._last_monitor_check > MONITOR_CHECK_INTERVAL:
             self._refresh_monitors()
             self._last_monitor_check = now
 
@@ -701,11 +719,11 @@ class GazeTracker:
 
                 # Debug line to monitor dwell, idle, and threshold
                 dwell_threshold = self.dwell_learner.get()
-                # logger.debug(
-                #     f"dwell={gaze_dwell:.2f} "
-                #     f"idle={intent_idle:.2f} "
-                #     f"threshold={dwell_threshold:.2f}"
-                # )
+                logger.debug(
+                    f"dwell={gaze_dwell:.2f} "
+                    f"idle={intent_idle:.2f} "
+                    f"threshold={dwell_threshold:.2f}"
+                )
 
                 if self.manual_override_triggered or (
                     gaze_dwell >= dwell_threshold
