@@ -398,6 +398,13 @@ class GazeTracker:
             monitor_camera_mapping (dict[int, dict]): A dictionary mapping monitor
             IDs to their configurations.
         """
+        # Remove estimators for monitors that no longer exist
+        for monitor_id in list(self.estimators.keys()):
+            if monitor_id not in set(monitor_camera_mapping.keys()):
+                logger.info(f"Removing estimator for disconnected monitor {monitor_id}")
+                estimator = self.estimators.pop(monitor_id)
+                estimator.stop()
+
         # Set up new cameras
         for monitor_id, config in monitor_camera_mapping.items():
             enabled = config.get("enabled")
@@ -444,7 +451,7 @@ class GazeTracker:
                     del self.estimators[monitor_id]
 
         # Update local state and persist
-        self.monitor_camera_mapping.update(monitor_camera_mapping)
+        self.monitor_camera_mapping = monitor_camera_mapping
         self.config["monitor_camera_mapping"] = self.monitor_camera_mapping
         save_config(self.config)
 

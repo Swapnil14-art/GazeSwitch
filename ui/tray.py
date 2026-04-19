@@ -311,7 +311,6 @@ def open_config_window(tracker: GazeTracker, root: tk.Tk):
         if was_running:
             tracker.start_tracking()
 
-        tracker.wm.notify("Configuration saved")
         window.destroy()
 
     button_frame = ttk.Frame(main_frame)
