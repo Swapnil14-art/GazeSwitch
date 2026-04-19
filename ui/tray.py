@@ -72,6 +72,40 @@ def create_tray_icon(tracker: GazeTracker, root: tk.Tk) -> None:
         ),
     )
 
+    # Calibration submenu
+    def make_calibrate_item(label: str, monitor_id: int | None = None):
+        """
+        Helper to create a pystray MenuItem for a calibration option.
+
+        Args:
+            label (str): The base label for the menu item (e.g., "Monitor 0").
+            monitor_id (int, optional): The monitor for the given calibration option.
+            Defaults to None.
+        """
+        return item(
+            label,
+            lambda icon, item: calibrate_action(tracker, monitor_id),
+        )
+
+    def calibrate_action(tracker: GazeTracker, monitor_id: int | None = None):
+        if monitor_id is None:
+            tracker.wm.notify("Starting calibration for all monitors...")
+            tracker.calibrate()
+        else:
+            tracker.wm.notify(f"Starting calibration for monitor {monitor_id}...")
+            tracker.calibrate(monitor_id=monitor_id)
+
+    calibrate_menu = item(
+        "Calibrate",
+        pystray.Menu(
+            item("All Monitors", lambda icon, item: calibrate_action(tracker)),
+            *[
+                make_calibrate_item(f"Monitor {m['id']}", m["id"])
+                for m in tracker.monitor_rects
+            ],
+        ),
+    )
+
     menu = (
         item(
             "Start Tracking",
@@ -79,7 +113,7 @@ def create_tray_icon(tracker: GazeTracker, root: tk.Tk) -> None:
             checked=lambda item: tracker.running,
         ),
         item("Stop Tracking", lambda icon, item: tracker.stop_tracking()),
-        item("Calibrate", lambda icon, item: tracker.calibrate()),
+        calibrate_menu,
         item(
             "Configure Monitors && Cameras",
             lambda icon, item: (root.after(0, open_config_window, tracker, root)),

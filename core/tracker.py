@@ -499,15 +499,22 @@ class GazeTracker:
         self._start_hotkey_listener()
         logger.info(f"{action} hotkey set to {hotkey}")
 
-    def calibrate(self, icon=None, _=None):
+    def calibrate(self, icon=None, _=None, monitor_id: int | None = None):
         """
         Starts the calibration process.
+
+        Args:
+            monitor_id (int, optional): The monitor to run calibration for.
+            Defaults to None.
         """
-        logger.info("Starting calibration")
-        for monitor_id, estimator in self.estimators.items():
+        if monitor_id is None:
+            for m_id, estimator in self.estimators.items():
+                camera_index = self.monitor_camera_mapping[m_id]["camera_index"]
+                estimator.calibrate(camera_index)
+        else:
             camera_index = self.monitor_camera_mapping[monitor_id]["camera_index"]
+            estimator = self.estimators[monitor_id]
             estimator.calibrate(camera_index)
-        logger.info("Calibration finished")
 
     def start_tracking(self):
         """
