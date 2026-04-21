@@ -616,8 +616,8 @@ class GazeTracker:
         """
         for monitor in self.monitor_rects:
             if (
-                monitor["left"] <= x <= monitor["right"]
-                and monitor["top"] <= y <= monitor["bottom"]
+                monitor["left"] < x < monitor["right"]
+                and monitor["top"] < y < monitor["bottom"]
             ):
                 return monitor
         return None
@@ -668,8 +668,8 @@ class GazeTracker:
 
                 # Only use this gaze data if it falls within this monitor's bounds
                 if (
-                    monitor["left"] <= x_virt <= monitor["right"]
-                    and monitor["top"] <= y_virt <= monitor["bottom"]
+                    monitor["left"] < x_virt < monitor["right"]
+                    and monitor["top"] < y_virt < monitor["bottom"]
                 ):
                     x, y = x_virt, y_virt
                     break

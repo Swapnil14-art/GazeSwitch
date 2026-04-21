@@ -42,7 +42,7 @@ class WindowsWindowManager(WindowManager):
 
     def _point_in_rect(self, x, y, rect):
         left, top, right, bottom = rect
-        return left <= x <= right and top <= y <= bottom
+        return left < x < right and top < y < bottom
 
     def window_at_point(self, x: int, y: int, windows: list[dict]) -> dict | None:
         for w in windows:
