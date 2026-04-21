@@ -43,6 +43,10 @@ class WindowsWindowManager(WindowManager):
     def focus_window(self, window: dict) -> None:
         try:
             shell = win32com.client.Dispatch("WScript.Shell")
+            # SendKeys("%") simulates an ALT press to satisfy Windows' foreground-window
+            # security restrictions. SetForegroundWindow() often fails without recent
+            # user input, and this workaround tricks Windows into allowing the focus
+            # change.
             shell.SendKeys("%")
             win32gui.SetForegroundWindow(window["hwnd"])
         except Exception as e:

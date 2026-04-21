@@ -605,5 +605,10 @@ class GazeTracker:
         Main loop to track gaze and focus windows accordingly.
         """
         while self.running:
-            self._run_tracker_step()
+            try:
+                self._run_tracker_step()
+            except Exception as e:
+                logger.exception(f"Tracking step failed, stopping tracker: {e}")
+                self.shutdown()
+                break
             time.sleep(POLL_INTERVAL)
