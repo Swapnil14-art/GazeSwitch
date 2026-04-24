@@ -62,7 +62,10 @@ class EyeTraxWrapper(BaseTracker):
         if not self.is_camera_ready():
             raise RuntimeError("Camera not started")
 
-        _, frame = self.cap.read()  # type: ignore
+        ret, frame = self.cap.read()  # type: ignore[reportOptionalMemberAccess]
+        if not ret or frame is None:
+            return {"gaze": {"x": None, "y": None}, "timestamp": time.time()}
+
         features, blink = self.tracker.extract_features(frame)
         x, y = (
             self.tracker.predict([features])[0]
