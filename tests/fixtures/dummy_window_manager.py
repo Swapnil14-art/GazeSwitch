@@ -5,7 +5,6 @@ from system_platform.window_manager import WindowManager
 
 class DummyWindowManager(WindowManager):
     def __init__(self):
-        # Simulate some windows
         self.windows_list = [
             {"title": "Window A", "rect": (0, 0, 200, 200), "handle": 1},
             {"title": "Window B", "rect": (150, 150, 350, 350), "handle": 2},
@@ -20,7 +19,6 @@ class DummyWindowManager(WindowManager):
         return self.windows_list
 
     def window_at_point(self, x: int, y: int, windows: List[Dict]) -> Optional[Dict]:
-        # Return the topmost window (last in list) that contains the point
         for w in reversed(windows):
             x0, y0, x1, y1 = w["rect"]
             if x0 <= x <= x1 and y0 <= y <= y1:
@@ -28,7 +26,6 @@ class DummyWindowManager(WindowManager):
         return None
 
     def windows_at_point(self, x: int, y: int, windows: List[Dict]) -> List[Dict]:
-        # Return all windows that contain the point, in Z-order (topmost last)
         result = []
         for w in windows:
             x0, y0, x1, y1 = w["rect"]
@@ -49,9 +46,10 @@ class DummyWindowManager(WindowManager):
         return self.focused_window
 
     def window_key(self, window: Dict) -> str:
-        # Use the handle as a unique key
         return str(window.get("handle", "unknown"))
 
     def notify(self, title: str) -> None:
-        # Record notifications for testing
         self.notifications.append(title)
+
+    def create_monitor_listener(self, callback) -> None:
+        pass
