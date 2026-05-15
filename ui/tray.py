@@ -29,12 +29,11 @@ def resource_path(relative_path: str) -> str:
     return os.path.join(base_path, relative_path)
 
 
-def create_tray_icon(tracker: GazeTracker, root: tk.Tk) -> None:
+def build_tray_menu(tracker: GazeTracker, root: tk.Tk) -> pystray.Menu:
     """
-    Create and run the system tray icon with menu options.
+    Build the system tray menu.
+    This is separated into its own function to allow dynamic updates.
     """
-    icon_path = resource_path("media/icon.png")
-    image = Image.open(icon_path)
 
     """
     pystray invokes menu item action callbacks with two arguments (icon, item), 
@@ -106,7 +105,7 @@ def create_tray_icon(tracker: GazeTracker, root: tk.Tk) -> None:
         ),
     )
 
-    menu = (
+    return pystray.Menu(
         item(
             "Start Tracking",
             lambda icon, item: start_tracking(tracker),
@@ -122,7 +121,30 @@ def create_tray_icon(tracker: GazeTracker, root: tk.Tk) -> None:
         item("Exit", partial(exit_app, tracker=tracker, root=root)),
     )
 
-    icon = pystray.Icon("GazeControl", image, "Gaze Control", menu)
+
+def create_tray_icon(tracker: GazeTracker, root: tk.Tk) -> None:
+    """
+    Create and run the system tray icon with menu options.
+    """
+    icon_path = resource_path("media/icon.png")
+    image = Image.open(icon_path)
+
+    icon = pystray.Icon(
+        "GazeControl", image, "Gaze Control", menu=build_tray_menu(tracker, root)
+    )
+
+    # Store callback reference in tracker for dynamic menu updates when monitors change
+    def rebuild_menu():
+        root.after(
+            0,
+            lambda: (
+                setattr(icon, "menu", build_tray_menu(tracker, root)),
+                icon.update_menu(),
+            ),
+        )
+
+    tracker.on_monitors_changed = rebuild_menu  # type: ignore[reportAttributeAccessIssue]
+
     icon.run()
 
 
@@ -194,9 +216,6 @@ def open_config_window(tracker: GazeTracker, root: tk.Tk):
     ttk.Label(container, text="Camera", style="Header.TLabel").grid(
         row=0, column=2, padx=5
     )
-    ttk.Label(container, text="Resolution", style="Header.TLabel").grid(
-        row=0, column=3, padx=5
-    )
 
     monitors = tracker.monitor_rects
     cameras = tracker.wm.list_video_devices()
@@ -238,12 +257,6 @@ def open_config_window(tracker: GazeTracker, root: tk.Tk):
             width=25,
         )
         dropdown.grid(row=row, column=2, padx=5)
-
-        # Resolution
-        width = monitor["right"] - monitor["left"]
-        height = monitor["bottom"] - monitor["top"]
-
-        ttk.Label(container, text=f"{width}x{height}").grid(row=row, column=3)
 
         selections[monitor_id] = {
             "enabled": enabled_var,

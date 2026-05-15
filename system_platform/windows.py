@@ -1,15 +1,107 @@
 import logging
+import threading
 
 import win32api
 import win32com.client
+import win32con
 import win32gui
 from pygrabber.dshow_graph import FilterGraph
 from winotify import Notification, audio
 
-from system_platform.window_manager import WindowManager
+from system_platform.window_manager import MonitorListener, WindowManager
 from ui.tray import resource_path
 
 logger = logging.getLogger(__name__)
+
+
+class WindowsMonitorListener(MonitorListener):
+    def __init__(self, callback):
+        self.callback = callback
+        self.hwnd = None
+        self.running = False
+        self.thread = None
+        self.class_name = "GazeControlMonitorListener"
+
+    def start(self) -> None:
+        if self.running:
+            return
+        self.running = True
+        self.thread = threading.Thread(target=self._create_listener_window, daemon=True)
+        self.thread.start()
+        logger.info("Windows monitor listener started")
+
+    def stop(self) -> None:
+        self.running = False
+
+        hwnd = self.hwnd
+        self.hwnd = None
+
+        if hwnd:
+            try:
+                win32gui.PostMessage(hwnd, win32con.WM_CLOSE, 0, 0)
+            except Exception as e:
+                logger.debug(f"Error posting quit message: {e}")
+
+    def _create_listener_window(self) -> None:
+        """
+        Create a hidden window to receive WM_DISPLAYCHANGE messages.
+        """
+        try:
+            wc = win32gui.WNDCLASS()
+            wc.lpszClassName = self.class_name  # type: ignore
+            wc.lpfnWndProc = self._wnd_proc  # type: ignore
+
+            try:
+                class_atom = win32gui.RegisterClass(wc)
+            except win32gui.error as e:
+                logger.debug(f"Window class already registered: {e}")
+                class_atom = self.class_name
+
+            # Create hidden window
+            self.hwnd = win32gui.CreateWindow(
+                class_atom,
+                "GazeControl Monitor Listener",
+                win32con.WS_OVERLAPPED,
+                0,
+                0,
+                1,
+                1,
+                0,
+                0,
+                win32api.GetModuleHandle(None),
+                None,
+            )
+
+            logger.debug(f"Listener window created: hwnd={self.hwnd}")
+            win32gui.PumpMessages()
+        except Exception as e:
+            logger.error(f"Failed to create monitor listener: {e}", exc_info=True)
+        finally:
+            hwnd = self.hwnd
+            self.hwnd = None
+
+            if hwnd:
+                try:
+                    win32gui.DestroyWindow(hwnd)
+                except Exception as e:
+                    logger.debug(f"Error destroying listener window: {e}")
+
+    def _wnd_proc(self, hwnd, msg, wparam, lparam):
+        if msg == win32con.WM_DISPLAYCHANGE:
+            logger.debug(f"WM_DISPLAYCHANGE received: wparam={wparam}, lparam={lparam}")
+            try:
+                self.callback()
+            except Exception as e:
+                logger.error(f"Callback error: {e}", exc_info=True)
+            return 0
+        elif msg == win32con.WM_CLOSE:
+            win32gui.DestroyWindow(hwnd)
+            return 0
+        elif msg == win32con.WM_DESTROY:
+            win32gui.PostQuitMessage(0)
+            return 0
+
+        return win32gui.DefWindowProc(hwnd, msg, wparam, lparam)
 
 
 class WindowsWindowManager(WindowManager):
@@ -111,3 +203,6 @@ class WindowsWindowManager(WindowManager):
             notification.show()
         except Exception as e:
             logger.debug(f"Notification failed: {e}")
+
+    def create_monitor_listener(self, callback) -> MonitorListener | None:
+        return WindowsMonitorListener(callback)

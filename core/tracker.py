@@ -39,6 +39,9 @@ SUCCESS_WINDOW = 2.0  # seconds
 
 class GazeTracker:
     def __init__(self, window_manager: WindowManager):
+        # Store callback for monitor changes so we can update the tray menu
+        self.on_monitors_changed = None
+
         # Configuration
         self.config = load_config()
 
@@ -86,6 +89,11 @@ class GazeTracker:
         self.virtual_height = self.virtual_bottom - self.virtual_top
 
         self._last_monitor_check = time.time()
+
+        # Initialise OS-specific monitor change listener
+        self.monitor_listener = self._create_monitor_listener()
+        if self.monitor_listener:
+            self.monitor_listener.start()
 
         # Gaze trackers
         self.estimators: dict[int, BaseTracker] = {}
@@ -192,6 +200,24 @@ class GazeTracker:
             logger.info("Camera preloaded")
         except Exception:
             logger.exception("Camera preload failed")
+
+    def _create_monitor_listener(self):
+        try:
+            return self.wm.create_monitor_listener(self._on_monitor_change)
+        except Exception as e:
+            logger.debug(f"Monitor listener unavailable: {e}")
+        return None
+
+    def _on_monitor_change(self) -> None:
+        logger.debug("Monitor change event triggered")
+
+        self._refresh_monitors()
+
+        # Notify the UI that monitors have changed
+        if self.on_monitors_changed:
+            self.on_monitors_changed()
+
+        logger.info("Monitor refresh complete")
 
     def _on_key_press(self, _):
         self.last_keystroke_time = time.time()
@@ -549,6 +575,8 @@ class GazeTracker:
         Stop the gaze tracking process.
         """
         self.running = False
+        if self.monitor_listener:
+            self.monitor_listener.stop()
         logger.info("Tracking stopped")
 
     def release_camera(self, camera_index: int):
@@ -570,37 +598,30 @@ class GazeTracker:
 
     def _refresh_monitors(self) -> None:
         """
-        Detect and handle monitor changes at runtime.
+        Handle monitor changes at runtime.
         """
         current_monitors = get_monitors()
-        current_count = len(current_monitors)
 
-        if current_count != len(self.monitor_rects):
-            logger.info(
-                f"Monitor count changed from {len(self.monitor_rects)} to "
-                f"{current_count}"
-            )
+        # Rebuild monitor list
+        self.monitor_rects = [
+            {
+                "id": i,
+                "name": m.name,
+                "left": m.x,
+                "top": m.y,
+                "right": m.x + m.width,
+                "bottom": m.y + m.height,
+            }
+            for i, m in enumerate(current_monitors)
+        ]
 
-            # Rebuild monitor list
-            self.monitor_rects = [
-                {
-                    "id": i,
-                    "name": m.name,
-                    "left": m.x,
-                    "top": m.y,
-                    "right": m.x + m.width,
-                    "bottom": m.y + m.height,
-                }
-                for i, m in enumerate(current_monitors)
-            ]
-
-            # Recalculate virtual desktop bounds
-            self.virtual_left = min(m.x for m in current_monitors)
-            self.virtual_top = min(m.y for m in current_monitors)
-            self.virtual_right = max(m.x + m.width for m in current_monitors)
-            self.virtual_bottom = max(m.y + m.height for m in current_monitors)
-            self.virtual_width = self.virtual_right - self.virtual_left
-            self.virtual_height = self.virtual_bottom - self.virtual_top
+        # Recalculate virtual desktop bounds
+        self.virtual_left = min(m.x for m in current_monitors)
+        self.virtual_top = min(m.y for m in current_monitors)
+        self.virtual_right = max(m.x + m.width for m in current_monitors)
+        self.virtual_bottom = max(m.y + m.height for m in current_monitors)
+        self.virtual_width = self.virtual_right - self.virtual_left
+        self.virtual_height = self.virtual_bottom - self.virtual_top
 
     def _get_monitor_at_position(self, x: int, y: int) -> dict | None:
         """
