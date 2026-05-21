@@ -387,9 +387,7 @@ def exit_app(icon, _, tracker: GazeTracker, root: tk.Tk):
     Exit the application by stopping tracking, the tray icon, and
     the Tkinter root window.
     """
-    tracker.stop_tracking()
-    for camera_index in list(tracker.camera_cap_mapping.keys()):
-        tracker.release_camera(camera_index)
+    tracker.shutdown()
     icon.stop()
     root.quit()
     root.destroy()

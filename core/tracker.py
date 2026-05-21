@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 from threading import Thread
 
@@ -160,6 +161,9 @@ class GazeTracker:
             "cycle_windows_reverse_hotkey", DEFAULT_CYCLE_WINDOWS_REVERSE_HOTKEY
         )
 
+        # Thread-safe state lock for flags accessed by hotkey listeners
+        self._hotkey_state_lock = threading.Lock()
+
         self.hotkey_listener = None
         self._start_hotkey_listener()
 
@@ -243,42 +247,46 @@ class GazeTracker:
         Triggers an immediate focus on the current gaze target,
         bypassing dwell/idle checks.
         """
-        self.manual_override_triggered = True
         logger.info("Manual override triggered")
 
-        # Regret event - User used manual override shortly after
-        # an automatic focus (focus happened too early)
-        time_since_focus = (
-            time.time() - self.last_auto_focus_time
-            if self.last_auto_focus_time is not None
-            else None
-        )
-        if time_since_focus and time_since_focus < REGRET_WINDOW:
-            # Convert time into a normalised regret strength
-            # - Immediate correction (time = 0) - strength = 1.0 (strong regret)
-            # - Near the boundary (time = REGRET_WINDOW) - strength = 0.0 (weak regret)
-            #
-            # This creates a smooth gradient instead of a binary signal,
-            # allowing the learner to adjust proportionally to how wrong it was.
-            strength = 1 - (time_since_focus / REGRET_WINDOW)
+        with self._hotkey_state_lock:
+            self.manual_override_triggered = True
 
-            if self.dwell_learner.on_regret(strength):
-                self._persist_dwell()
+            # Regret event - User used manual override shortly after
+            # an automatic focus (focus happened too early)
+            time_since_focus = (
+                time.time() - self.last_auto_focus_time
+                if self.last_auto_focus_time is not None
+                else None
+            )
+            if time_since_focus and time_since_focus < REGRET_WINDOW:
+                # Convert time into a normalised regret strength:
+                # - Immediate correction (time = 0) -> strength = 1.0
+                # - Near the boundary (time = REGRET_WINDOW) -> strength = 0.0
+                #
+                # This creates a smooth gradient instead of a binary signal,
+                # allowing the learner to adjust proportionally to how wrong it wass.
+                strength = 1 - (time_since_focus / REGRET_WINDOW)
 
-            self.last_auto_focus_time = None
+                if self.dwell_learner.on_regret(strength):
+                    self._persist_dwell()
+
+                self.last_auto_focus_time = None
 
     def _cycle_windows(self):
         """
         Cycle through all windows under the gaze point.
         """
-        self.cycle_forward_triggered = True
+        with self._hotkey_state_lock:
+            self.cycle_forward_triggered = True
         logger.info("Cycle windows hotkey triggered")
 
     def _cycle_windows_reverse(self):
         """
         Cycle through all windows under the gaze point in reverse.
         """
-        self.cycle_reverse_triggered = True
+        with self._hotkey_state_lock:
+            self.cycle_reverse_triggered = True
         logger.info("Reverse cycle windows hotkey triggered")
 
     def _cycle_windows_at_gaze(
@@ -378,27 +386,28 @@ class GazeTracker:
             self.current_window = focused
             logger.debug(f"OS focus changed to: {focused.get('title')}")
 
-        # Regret event - User manually switched window shortly after an
-        # automatic focus
-        time_since_focus = (
-            time.time() - self.last_auto_focus_time
-            if self.last_auto_focus_time is not None
-            else None
-        )
-        if time_since_focus and time_since_focus < REGRET_WINDOW:
-            if not self._same_window(focused, self.last_auto_focused_window):
-                # Convert time into a normalised regret strength
-                # - Immediate correction (time = 0) → strength = 1.0 (strong regret)
-                # - Near the boundary (time = REGRET_WINDOW) → strength = 0.0 (weak)
-                #
-                # This creates a smooth gradient instead of a binary signal,
-                # allowing the learner to adjust proportionally to how wrong it was.
-                strength = 1 - (time_since_focus / REGRET_WINDOW)
+        with self._hotkey_state_lock:
+            # Regret event - User manually switched window shortly after an
+            # automatic focus
+            time_since_focus = (
+                time.time() - self.last_auto_focus_time
+                if self.last_auto_focus_time is not None
+                else None
+            )
+            if time_since_focus and time_since_focus < REGRET_WINDOW:
+                if not self._same_window(focused, self.last_auto_focused_window):
+                    # Convert time into a normalised regret strength
+                    # - Immediate correction (time = 0) -> strength = 1.0
+                    # - Near the boundary (time = REGRET_WINDOW) -> strength = 0.0
+                    #
+                    # This creates a smooth gradient instead of a binary signal,
+                    # allowing the learner to adjust proportionally to how wrong it was.
+                    strength = 1 - (time_since_focus / REGRET_WINDOW)
 
-                if self.dwell_learner.on_regret(strength):
-                    self._persist_dwell()
+                    if self.dwell_learner.on_regret(strength):
+                        self._persist_dwell()
 
-                self.last_auto_focus_time = None
+                    self.last_auto_focus_time = None
 
     def _persist_dwell(self):
         """
@@ -643,6 +652,31 @@ class GazeTracker:
                 return monitor
         return None
 
+    def shutdown(self):
+        """
+        Shutdown the tracker by stopping tracking and releasing resources.
+        """
+        self.stop_tracking()
+
+        if self.keyboard_listener:
+            try:
+                self.keyboard_listener.stop()
+                logger.info("Keyboard listener stopped")
+            except Exception as e:
+                logger.exception(f"Error stopping keyboard listener: {e}")
+
+        if self.hotkey_listener:
+            try:
+                self.hotkey_listener.stop()
+                logger.info("Hotkey listener stopped")
+            except Exception as e:
+                logger.exception(f"Error stopping hotkey listener: {e}")
+
+        for camera_index in list(self.camera_cap_mapping.keys()):
+            self.release_camera(camera_index)
+
+        logger.info("Tracker shutdown complete")
+
     def _run_tracker_step(self):
         """
         Helper function to run a single iteration of the main
@@ -716,19 +750,26 @@ class GazeTracker:
 
             # Cycling is handled immediately and independently of the normal
             # dwell/intent logic because it is an explicit user action.
-            if self.cycle_forward_triggered or self.cycle_reverse_triggered:
-                reverse = self.cycle_reverse_triggered
-                self._cycle_windows_at_gaze(int(x), int(y), windows, reverse=reverse)
+            with self._hotkey_state_lock:
+                cycle_triggered = (
+                    self.cycle_forward_triggered or self.cycle_reverse_triggered
+                )
 
-                self.cycle_forward_triggered = False
-                self.cycle_reverse_triggered = False
+                if cycle_triggered:
+                    reverse = self.cycle_reverse_triggered
+                    self._cycle_windows_at_gaze(
+                        int(x), int(y), windows, reverse=reverse
+                    )
 
-                # Skip the rest of the gaze intent logic this frame to avoid the
-                # dwell-based focusing logic triggering immediately after cycling.
-                # Cycling is an explicit user action and should not be followed by
-                # automatic focus logic in the same iteration.
-                time.sleep(POLL_INTERVAL)
-                return
+                    self.cycle_forward_triggered = False
+                    self.cycle_reverse_triggered = False
+
+                    # Skip the rest of the gaze intent logic this frame to avoid the
+                    # dwell-based focusing logic triggering immediately after cycling.
+                    # Cycling is an explicit user action and should not be followed by
+                    # automatic focus logic in the same iteration.
+                    time.sleep(POLL_INTERVAL)
+                    return
 
             target_window = self.wm.window_at_point(int(x), int(y), windows)
 
@@ -759,7 +800,10 @@ class GazeTracker:
                     f"threshold={dwell_threshold:.2f}"
                 )
 
-                if self.manual_override_triggered or (
+                with self._hotkey_state_lock:
+                    manual_override = self.manual_override_triggered
+
+                if manual_override or (
                     gaze_dwell >= dwell_threshold
                     and intent_idle >= TYPING_IDLE_TIME
                     and (
@@ -789,7 +833,8 @@ class GazeTracker:
                     # Reset to prevent immediate re-trigger
                     self._tracker_gaze_dwell_start = now
                     self._tracker_intent_idle_since = now
-                    self.manual_override_triggered = False
+                    with self._hotkey_state_lock:
+                        self.manual_override_triggered = False
             else:
                 # No window detected, reset gaze dwell
                 self._tracker_last_target = None
@@ -810,5 +855,10 @@ class GazeTracker:
         Main loop to track gaze and focus windows accordingly.
         """
         while self.running:
-            self._run_tracker_step()
+            try:
+                self._run_tracker_step()
+            except Exception as e:
+                logger.exception(f"Tracking step failed, stopping tracker: {e}")
+                self.shutdown()
+                break
             time.sleep(POLL_INTERVAL)

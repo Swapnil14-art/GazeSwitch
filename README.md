@@ -7,7 +7,7 @@ A gaze-tracking application that enables eye-gaze-based window focusing and cont
 - [Overview](#overview)
 - [Features](#features)
 - [How It Works](#how-it-works)
-- [System Requirements](#system-requirements)
+<!-- - [System Requirements](#system-requirements) -->
 - [Installation](#installation)
 - [Getting Started](#getting-started)
 - [Configuration](#configuration)
@@ -16,7 +16,7 @@ A gaze-tracking application that enables eye-gaze-based window focusing and cont
   - [Camera Selection](#camera-selection)
   - [Adaptive Dwell Learning](#adaptive-dwell-learning)
 - [Usage Guide](#usage-guide)
-- [Supported Platforms](#supported-platforms)
+<!-- - [Supported Platforms](#supported-platforms) -->
 - [Troubleshooting](#troubleshooting)
 - [Advanced Configuration](#advanced-configuration)
 
@@ -37,7 +37,7 @@ The system combines advanced eye-tracking algorithms with adaptive learning to p
 - **Real-time Gaze Tracking**: Continuous eye-movement detection using webcam video
 - **Automatic Window Focusing**: Smart window focus based on gaze position
 - **Multi-camera Support**: Works with various USB cameras and built-in webcams
-<!-- - **Cross-platform**: Runs on Windows, macOS, and Linux -->
+- **Cross-platform**: Runs on Windows and Linux
 
 ### Intelligent Control
 - **Adaptive Dwell Learning**: The system automatically adjusts dwell time based on your behaviour:
@@ -123,36 +123,66 @@ If you have a compiled executable, simply run `GazeControl.exe`.
 
 ### From Source
 
-#### Prerequisites
-- Python 3.8+ installed
-- pip (Python package manager)
-- Git (optional, for cloning)
+#### Windows
 
-#### Steps
-
-1. **Clone or download the repository**:
+1. **Clone the repository**:
    ```bash
-   git clone https://github.com/Maciek03102003/GazeControl.git
+   git clone https://github.com/maciejrytlewski/GazeControl.git
    cd GazeControl
    ```
 
 2. **Create a virtual environment** (recommended):
    ```bash
-   # Windows
    python -m venv venv
    venv\Scripts\activate
-
-   # macOS/Linux
-   python3 -m venv venv
-   source venv/bin/activate
    ```
 
-3. **Install dependencies**:
+3. **Install Python dependencies**:
    ```bash
    pip install -r requirements.txt
    ```
 
 4. **Run the application**:
+   ```bash
+   python main.py
+   ```
+
+#### Linux (Ubuntu/Debian)
+
+1. **Install system dependencies**:
+   ```bash
+   sudo apt update
+   sudo apt install -y \
+      python3 python3-venv \
+      python3-opencv \
+      python3-gi \
+      python3-pystray \
+      libayatana-appindicator3-1
+   ```
+
+2. **Clone the repository**:
+   ```bash
+   git clone https://github.com/maciejrytlewski/GazeControl.git
+   cd GazeControl
+   ```
+
+3. **Create a virtual environment (with system packages)**:
+   ```bash
+   python -m venv --system-site-packages venv
+   source venv/bin/activate
+   ```
+
+4. **Install Python dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+5. **Remove conflicting OpenCV packages**:
+   ```bash
+   pip uninstall -y opencv-python opencv-contrib-python
+   ```
+
+6. **Run the application**:
    ```bash
    python main.py
    ```
@@ -468,26 +498,6 @@ GazeControl works across multiple monitors:
 4. **Linux X11 Focus**:
    - Hotkeys only work when a window has focus
    - This is X11 limitation
-
-<!-- ### Issue: "Permission Denied" on Linux
-
-**Symptoms**: Error when accessing camera or config files.
-
-**Solutions**:
-1. **Add to Video Group**:
-   ```bash
-   sudo usermod -aG video $USER
-   # Log out and back in for changes to take effect
-   ```
-2. **Check Camera Permissions**:
-   ```bash
-   ls -l /dev/video*
-   ```
-3. **Config Directory**:
-   ```bash
-   mkdir -p ~/.config/GazeControl
-   chmod 755 ~/.config/GazeControl
-   ``` -->
 
 ## Advanced Configuration
 

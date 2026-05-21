@@ -58,15 +58,19 @@ def main():
     setup_logging()
     wm = create_window_manager()
     tracker = GazeTracker(wm)
-    Thread(
-        target=create_tray_icon,
-        args=(
-            tracker,
-            root,
-        ),
-        daemon=True,
-    ).start()
-    root.mainloop()
+    try:
+        Thread(
+            target=create_tray_icon,
+            args=(
+                tracker,
+                root,
+            ),
+            daemon=True,
+        ).start()
+        root.mainloop()
+    finally:
+        tracker.shutdown()
+        logging.info("Application shutdown complete")
 
 
 if __name__ == "__main__":

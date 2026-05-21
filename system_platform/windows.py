@@ -132,26 +132,17 @@ class WindowsWindowManager(WindowManager):
 
         return windows
 
-    def _point_in_rect(self, x, y, rect):
-        left, top, right, bottom = rect
-        return left < x < right and top < y < bottom
-
-    def window_at_point(self, x: int, y: int, windows: list[dict]) -> dict | None:
-        for w in windows:
-            if self._point_in_rect(x, y, w["rect"]):
-                return w
-        return None
-
-    def windows_at_point(self, x: int, y: int, windows: list[dict]) -> list[dict]:
-        return [w for w in windows if self._point_in_rect(x, y, w["rect"])]
-
     def focus_window(self, window: dict) -> None:
         try:
             shell = win32com.client.Dispatch("WScript.Shell")
+            # SendKeys("%") simulates an ALT press to satisfy Windows' foreground-window
+            # security restrictions. SetForegroundWindow() often fails without recent
+            # user input, and this workaround tricks Windows into allowing the focus
+            # change.
             shell.SendKeys("%")
             win32gui.SetForegroundWindow(window["hwnd"])
         except Exception as e:
-            print(f"Could not focus window: {e}")
+            logger.exception(f"Could not focus window: {e}")
 
     def get_screen_size(self) -> tuple[int, int]:
         return win32api.GetSystemMetrics(0), win32api.GetSystemMetrics(1)
