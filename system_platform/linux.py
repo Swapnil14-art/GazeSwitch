@@ -210,4 +210,6 @@ class LinuxWindowManager(WindowManager):
             logger.debug(f"Notification failed: {e}")
 
     def create_monitor_listener(self, callback) -> MonitorListener | None:
-        return LinuxMonitorListener(callback)
+        if self.server == "x11":
+            return LinuxMonitorListener(callback)
+        return None
