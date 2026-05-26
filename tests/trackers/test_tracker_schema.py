@@ -19,10 +19,9 @@ def test_dummy_tracker_schema():
 
 
 def test_eyetrax_tracker_schema():
-    tracker = EyeTraxWrapper()
+    tracker = EyeTraxWrapper(cap=MagicMock())
 
-    tracker.cap = MagicMock()
-    tracker.cap.read.return_value = (True, MagicMock())
+    tracker.cap.read.return_value = (True, MagicMock())  # type: ignore[union-attr]
 
     tracker.tracker.predict = MagicMock(return_value=[(100, 200)])
     tracker.tracker.extract_features = MagicMock(return_value=(MagicMock(), False))

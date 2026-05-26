@@ -1,4 +1,4 @@
-from system_platform.window_manager import WindowManager
+from system_platform.window_manager import MonitorListener, WindowManager
 
 
 class MacOSWindowManager(WindowManager):
@@ -27,4 +27,7 @@ class MacOSWindowManager(WindowManager):
         raise NotImplementedError("Only works on MacOS")
 
     def notify(self, title: str) -> None:
+        raise NotImplementedError("Only works on MacOS")
+
+    def create_monitor_listener(self, callback) -> MonitorListener | None:
         raise NotImplementedError("Only works on MacOS")

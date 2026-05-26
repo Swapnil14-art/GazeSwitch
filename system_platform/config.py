@@ -1,4 +1,5 @@
 import json
+import logging
 import threading
 from typing import Any
 
@@ -6,6 +7,8 @@ from system_platform.utils import get_app_data_dir
 
 CONFIG_FILE = get_app_data_dir() / "config.json"
 _save_lock = threading.Lock()
+
+logger = logging.getLogger(__name__)
 
 
 def load_config() -> dict[str, Any]:
@@ -20,12 +23,27 @@ def load_config() -> dict[str, Any]:
 
     try:
         with open(CONFIG_FILE, "r") as f:
-            return json.load(f)
-    except Exception:
+            config = json.load(f)
+
+            # Convert string monitor IDs back to integers
+            if "monitor_camera_mapping" in config:
+                try:
+                    config["monitor_camera_mapping"] = {
+                        int(k): v for k, v in config["monitor_camera_mapping"].items()
+                    }
+                except (ValueError, TypeError) as e:
+                    logger.warning(
+                        f"Invalid monitor IDs in config: {e}. Using default config."
+                    )
+                    return {}
+
+            return config
+    except Exception as e:
+        logger.error(f"Failed to load config: {e}. Using default config.")
         return {}
 
 
-def save_config(config: dict[str, str]) -> None:
+def save_config(config: dict[str, Any]) -> None:
     """
     Save configuration to the config file.
 

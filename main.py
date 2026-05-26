@@ -1,8 +1,10 @@
 import logging
 import os
 import sys
+import tkinter as tk
 import warnings
 from logging.handlers import RotatingFileHandler
+from threading import Thread
 
 from core.tracker import GazeTracker
 from system_platform.utils import get_log_dir
@@ -10,6 +12,9 @@ from system_platform.window_manager import WindowManager
 from ui.tray import create_tray_icon
 
 warnings.filterwarnings("ignore", category=UserWarning, module="google.protobuf")
+
+root = tk.Tk()
+root.withdraw()
 
 
 def setup_logging():
@@ -54,7 +59,15 @@ def main():
     wm = create_window_manager()
     tracker = GazeTracker(wm)
     try:
-        create_tray_icon(tracker)
+        Thread(
+            target=create_tray_icon,
+            args=(
+                tracker,
+                root,
+            ),
+            daemon=True,
+        ).start()
+        root.mainloop()
     finally:
         tracker.shutdown()
         logging.info("Application shutdown complete")

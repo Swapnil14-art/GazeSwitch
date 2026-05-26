@@ -3,16 +3,21 @@ opencv-python
 mediapipe==0.10.14
 pytest
 ruff
+screeninfo
 pynput
-eyetrax
 gazefollower
 numpy<2
+
+# For multi-monitor support, a fork of EyeTrax is used that includes the required changes
+# to handle calibration on multiple monitors
+eyetrax @ git+https://github.com/maciejrytlewski/EyeTrax@multi-monitor-calibration
 
 # Windows-only dependencies
 pystray; sys_platform == "win32"
 pywin32; sys_platform == "win32"
 winotify; sys_platform == "win32"
 pyinstaller; sys_platform == "win32"
+pygrabber; sys_platform == "win32"
 
 # Linux-only dependencies
 notify2; sys_platform == "linux"

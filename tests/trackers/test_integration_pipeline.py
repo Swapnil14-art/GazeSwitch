@@ -7,7 +7,7 @@ def test_gaze_tracker_dwell_focus():
     wm = DummyWindowManager()
     tracker = DummyTracker()
     gaze_tracker = GazeTracker(window_manager=wm)
-    gaze_tracker.estimator = tracker
+    gaze_tracker.estimators[0] = tracker
 
     while True:
         gaze_tracker._run_tracker_step()
@@ -22,7 +22,7 @@ def test_gaze_tracker_manual_override():
     wm = DummyWindowManager()
     tracker = DummyTracker()
     gaze_tracker = GazeTracker(window_manager=wm)
-    gaze_tracker.estimator = tracker
+    gaze_tracker.estimators[0] = tracker
 
     # Focus initial window
     tracker.get_data = lambda: {"gaze": {"x": 50, "y": 50}, "timestamp": 123456.0}

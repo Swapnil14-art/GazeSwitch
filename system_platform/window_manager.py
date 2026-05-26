@@ -1,6 +1,22 @@
 from abc import ABC, abstractmethod
 
 
+class MonitorListener(ABC):
+    @abstractmethod
+    def start(self) -> None:
+        """
+        Start listening for monitor changes.
+        """
+        pass
+
+    @abstractmethod
+    def stop(self) -> None:
+        """
+        Stop listening for monitor changes.
+        """
+        pass
+
+
 class WindowManager(ABC):
     @abstractmethod
     def get_windows(self) -> list[dict]:
@@ -15,7 +31,7 @@ class WindowManager(ABC):
 
     def _point_in_rect(self, x, y, rect):
         left, top, right, bottom = rect
-        return left <= x <= right and top <= y <= bottom
+        return left < x < right and top < y < bottom
 
     def window_at_point(self, x: int, y: int, windows: list[dict]) -> dict | None:
         """
@@ -108,5 +124,18 @@ class WindowManager(ABC):
 
         Args:
             title (str): The title of the notification.
+        """
+        pass
+
+    @abstractmethod
+    def create_monitor_listener(self, callback) -> MonitorListener | None:
+        """
+        Create an OS-specific monitor change listener.
+
+        Args:
+            callback: Callable to invoke when monitor changes are detected.
+
+        Returns:
+            MonitorListener | None: A monitor listener instance, or None if unavailable.
         """
         pass
