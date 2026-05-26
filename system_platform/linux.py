@@ -1,15 +1,75 @@
 import logging
 import os
+import threading
+import time
 
 import notify2
 from ewmh import EWMH
 from pyudev import Context
 from screeninfo import get_monitors
-from Xlib import display
+from Xlib import X, display
 
 from system_platform.window_manager import MonitorListener, WindowManager
 
 logger = logging.getLogger(__name__)
+
+
+class LinuxMonitorListener(MonitorListener):
+    def __init__(self, callback):
+        self.callback = callback
+        self.running = False
+        self.thread = None
+        self.disp = None
+        self.root = None
+
+    def start(self) -> None:
+        if self.running:
+            return
+        self.running = True
+        self.thread = threading.Thread(target=self._listen_for_changes, daemon=True)
+        self.thread.start()
+        logger.info("Linux monitor listener started")
+
+    def stop(self) -> None:
+        self.running = False
+        if self.thread:
+            self.thread.join(timeout=2)
+
+    def _listen_for_changes(self) -> None:
+        """
+        Listen for RandR (X11 Rotate and Resize) screen change events.
+        """
+        try:
+            self.disp = display.Display()
+            self.root = self.disp.screen().root
+
+            # Select for RandR screen change events
+            self.root.change_attributes(event_mask=X.StructureNotifyMask)
+
+            while self.running:
+                try:
+                    event = self.disp.next_event()
+                    if event.type == X.ConfigureNotify:
+                        logger.debug(f"RandR event received: {event}")
+                        try:
+                            self.callback()
+                        except Exception as e:
+                            logger.error(f"Callback error: {e}", exc_info=True)
+                except Exception as e:
+                    if self.running:
+                        logger.debug(f"Event error: {e}")
+                    time.sleep(0.1)
+
+        except Exception as e:
+            logger.error(f"Failed to start monitor listener: {e}", exc_info=True)
+        finally:
+            if self.disp:
+                try:
+                    self.disp.close()
+                except Exception as e:
+                    logger.debug(f"Error closing display: {e}")
+            self.disp = None
+            self.root = None
 
 
 class LinuxWindowManager(WindowManager):
@@ -150,4 +210,4 @@ class LinuxWindowManager(WindowManager):
             logger.debug(f"Notification failed: {e}")
 
     def create_monitor_listener(self, callback) -> MonitorListener | None:
-        raise NotImplementedError("Only works on Linux")
+        return LinuxMonitorListener(callback)

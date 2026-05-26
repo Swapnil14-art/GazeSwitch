@@ -115,7 +115,7 @@ def build_tray_menu(tracker: GazeTracker, root: tk.Tk) -> pystray.Menu:
         calibrate_menu,
         item(
             "Configure Monitors && Cameras",
-            lambda icon, item: (root.after(0, open_config_window, tracker, root)),
+            lambda icon, item: root.after(0, open_config_window, tracker, root),
         ),
         hotkey_menu,
         item("Exit", partial(exit_app, tracker=tracker, root=root)),
@@ -387,7 +387,6 @@ def exit_app(icon, _, tracker: GazeTracker, root: tk.Tk):
     Exit the application by stopping tracking, the tray icon, and
     the Tkinter root window.
     """
-    tracker.shutdown()
     icon.stop()
     root.quit()
     root.destroy()
