@@ -35,6 +35,7 @@ ifeq ($(OS),Windows_NT)
 		--collect-submodules eyetrax \
 		--add-data "media/icon.png;media" \
 		--add-data "media/icon.ico;media" \
+		--add-data "media/icon_black.png;media" \
 		--icon "media/icon.ico" \
 		--name GazeControl \
 		main.py 
