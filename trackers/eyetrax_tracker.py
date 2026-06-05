@@ -4,6 +4,7 @@ from typing import Any
 
 import cv2
 from eyetrax import GazeEstimator, run_9_point_calibration
+from eyetrax.filters import KDESmoother
 
 from system_platform.utils import get_model_dir
 from trackers.base_tracker import BaseTracker
@@ -13,6 +14,8 @@ class EyeTraxWrapper(BaseTracker):
     def __init__(
         self,
         cap: cv2.VideoCapture,
+        screen_width: int,
+        screen_height: int,
         monitor_index: int = 0,
         model_dir: str = get_model_dir(),
     ):
@@ -21,8 +24,11 @@ class EyeTraxWrapper(BaseTracker):
         self.monitor_index = monitor_index
 
         self.model_path = f"{model_dir}/gaze_model_{monitor_index}.pkl"
-
         self.model_loaded = False
+
+        self.confidence_level = 0.95
+        self.screen_width = screen_width
+        self.screen_height = screen_height
 
     def is_ready(self) -> bool:
         if not os.path.exists(self.model_path):
@@ -43,6 +49,10 @@ class EyeTraxWrapper(BaseTracker):
         if self.is_ready():
             self.tracker.load_model(self.model_path)
             self.model_loaded = True
+
+            self.smoother = KDESmoother(
+                self.screen_width, self.screen_height, confidence=self.confidence_level
+            )
 
     def preload_camera(self):
         if not self.cap:
@@ -73,13 +83,14 @@ class EyeTraxWrapper(BaseTracker):
             return {"gaze": {"x": None, "y": None}, "timestamp": time.time()}
 
         features, blink = self.tracker.extract_features(frame)
-        x, y = (
-            self.tracker.predict([features])[0]
-            if features is not None and not blink
-            else (None, None)
-        )
 
-        result = {"gaze": {"x": x, "y": y}, "timestamp": time.time()}
+        if features is not None and not blink:
+            x, y = self.tracker.predict([features])[0]
+            x_pred, y_pred = self.smoother.step(x, y)
+        else:
+            x_pred = y_pred = None
+
+        result = {"gaze": {"x": x_pred, "y": y_pred}, "timestamp": time.time()}
 
         return result
 

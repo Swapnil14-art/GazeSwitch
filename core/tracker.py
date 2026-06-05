@@ -59,6 +59,8 @@ class GazeTracker:
                 "top": m.y,
                 "right": m.x + m.width,
                 "bottom": m.y + m.height,
+                "width": m.width,
+                "height": m.height,
             }
             for i, m in enumerate(monitors)
         ]
@@ -114,7 +116,12 @@ class GazeTracker:
                 )
                 continue
 
-            estimator = EyeTraxWrapper(cap=cap, monitor_index=monitor_id)
+            estimator = EyeTraxWrapper(
+                cap=cap,
+                monitor_index=monitor_id,
+                screen_width=self.monitor_rects[monitor_id]["width"],
+                screen_height=self.monitor_rects[monitor_id]["height"],
+            )
 
             if estimator.is_ready():
                 Thread(
@@ -469,7 +476,12 @@ class GazeTracker:
                             f"{monitor_id}, skipping estimator creation"
                         )
                         continue
-                    estimator = EyeTraxWrapper(cap=cap, monitor_index=monitor_id)
+                    estimator = EyeTraxWrapper(
+                        cap=cap,
+                        monitor_index=monitor_id,
+                        screen_width=self.monitor_rects[monitor_id]["width"],
+                        screen_height=self.monitor_rects[monitor_id]["height"],
+                    )
                     self.estimators[monitor_id] = estimator
                 else:
                     # Case 2: Monitor stays enabled, but camera might have changed
