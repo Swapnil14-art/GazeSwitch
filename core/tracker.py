@@ -577,6 +577,35 @@ class GazeTracker:
         if self.running:
             return
 
+        # Ensure all cameras, and thus estimators, are available before starting
+        # tracking. The user might have released a camera while tracking was stopped
+        for _, config in self.monitor_camera_mapping.items():
+            if not config.get("enabled"):
+                continue
+
+            camera_index = config["camera_index"]
+
+            cap = self.camera_cap_mapping.get(camera_index)
+            if not cap or not cap.isOpened():
+                self.camera_cap_mapping[camera_index] = cv2.VideoCapture(camera_index)
+
+        for monitor_id, config in self.monitor_camera_mapping.items():
+            if not config.get("enabled"):
+                continue
+
+            if monitor_id in self.estimators.keys():
+                continue
+
+            camera_index = config["camera_index"]
+            cap = self.camera_cap_mapping[camera_index]
+
+            self.estimators[monitor_id] = EyeTraxWrapper(
+                cap=cap,
+                monitor_index=monitor_id,
+                screen_width=self.monitor_rects[monitor_id]["width"],
+                screen_height=self.monitor_rects[monitor_id]["height"],
+            )
+
         for estimator in self.estimators.values():
             if not estimator.is_ready():
                 self.wm.notify("Calibration required before Tracking!")
@@ -606,15 +635,29 @@ class GazeTracker:
         """
         if self.running:
             self.wm.notify("Cannot release camera while tracking!")
-            logger.warning("Cannot release camera while tracking")
             return
 
         if camera_index not in self.camera_cap_mapping:
             logger.debug(f"Camera {camera_index} not in use, no need to release")
             return
 
+        # Find any monitors that were using this camera and remove their estimators
+        affected_monitors = [
+            m_id
+            for m_id, config in self.monitor_camera_mapping.items()
+            if config["camera_index"] == camera_index
+        ]
+        for monitor_id in affected_monitors:
+            if monitor_id in self.estimators.keys():
+                logger.debug(
+                    f"Removing estimator for monitor {monitor_id} due to camera release"
+                )
+                estimator = self.estimators.pop(monitor_id)
+                estimator.stop()
+
         self.camera_cap_mapping[camera_index].release()
         del self.camera_cap_mapping[camera_index]
+        self.wm.notify("Camera released")
         logger.info("Camera released")
 
     def _refresh_monitors(self) -> None:
