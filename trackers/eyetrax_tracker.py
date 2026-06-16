@@ -30,6 +30,13 @@ class EyeTraxWrapper(BaseTracker):
         self.screen_width = screen_width
         self.screen_height = screen_height
 
+    def _initialise_smoother(self):
+        self.smoother = KDESmoother(
+            self.screen_width,
+            self.screen_height,
+            confidence=self.confidence_level,
+        )
+
     def is_ready(self) -> bool:
         if not os.path.exists(self.model_path):
             return False
@@ -49,10 +56,7 @@ class EyeTraxWrapper(BaseTracker):
         if self.is_ready():
             self.tracker.load_model(self.model_path)
             self.model_loaded = True
-
-            self.smoother = KDESmoother(
-                self.screen_width, self.screen_height, confidence=self.confidence_level
-            )
+            self._initialise_smoother()
 
     def preload_camera(self):
         if not self.cap:
@@ -67,6 +71,7 @@ class EyeTraxWrapper(BaseTracker):
         run_9_point_calibration(self.tracker, device_index, self.monitor_index)
         self.tracker.save_model(self.model_path)
         self.model_loaded = True
+        self._initialise_smoother()
 
     def start(self):
         if not self.model_loaded:
