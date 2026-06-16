@@ -65,19 +65,16 @@ class GazeTracker:
             for i, m in enumerate(monitors)
         ]
 
-        self.monitor_camera_mapping: dict[int, dict[str, bool | int]] = self.config.get(
-            "monitor_camera_mapping", {}
+        self.monitor_camera_mapping: dict[int, dict[str, bool | int]] = (
+            self._normalise_monitor_camera_mapping()
         )
-        if not self.monitor_camera_mapping:
-            self.monitor_camera_mapping = {
-                monitor["id"]: {"enabled": True, "camera_index": DEFAULT_CAMERA_INDEX}
-                for monitor in self.monitor_rects
-            }
-            self.config["monitor_camera_mapping"] = self.monitor_camera_mapping
-            save_config(self.config)
+        self.config["monitor_camera_mapping"] = self.monitor_camera_mapping
+        save_config(self.config)
 
         unique_cameras = {
-            config["camera_index"] for config in self.monitor_camera_mapping.values()
+            config["camera_index"]
+            for config in self.monitor_camera_mapping.values()
+            if config.get("enabled") and config.get("camera_index") is not None
         }
         self.camera_cap_mapping = {
             camera_index: cv2.VideoCapture(camera_index)
@@ -195,6 +192,41 @@ class GazeTracker:
         self._tracker_last_target = None
         self._tracker_gaze_dwell_start = 0.0
         self._tracker_intent_idle_since = 0.0
+
+    def _normalise_monitor_camera_mapping(
+        self,
+        monitor_camera_mapping: dict[int, dict[str, bool | int]] | None = None,
+    ) -> dict[int, dict[str, bool | int]]:
+        """
+        Synchronise monitor configuration with the monitors currently detected
+        by the OS.
+
+        Args:
+            monitor_camera_mapping (dict[int, dict[str, bool  |  int]] | None,
+                optional): The saved monitor-camera mapping. Defaults to None.
+
+        Returns:
+            dict[int, dict[str, bool | int]]: The synchronised monitor-camera mapping.
+        """
+        valid_monitor_ids = {monitor["id"] for monitor in self.monitor_rects}
+
+        saved_mapping = monitor_camera_mapping or self.config.get(
+            "monitor_camera_mapping", {}
+        )
+
+        normalised = {
+            monitor_id: config
+            for monitor_id, config in saved_mapping.items()
+            if monitor_id in valid_monitor_ids
+        }
+
+        for monitor in self.monitor_rects:
+            normalised.setdefault(
+                monitor["id"],
+                {"enabled": True, "camera_index": DEFAULT_CAMERA_INDEX},
+            )
+
+        return normalised
 
     def _preload_gaze_model(self, estimator: BaseTracker, monitor_id: int):
         try:
@@ -441,7 +473,7 @@ class GazeTracker:
             IDs to their configurations.
         """
         # Remove estimators for monitors that no longer exist
-        for monitor_id in list(self.estimators.keys()):
+        for monitor_id in list(self.estimators):
             if monitor_id not in set(monitor_camera_mapping.keys()):
                 logger.info(f"Removing estimator for disconnected monitor {monitor_id}")
                 estimator = self.estimators.pop(monitor_id)
@@ -593,7 +625,7 @@ class GazeTracker:
             if not config.get("enabled"):
                 continue
 
-            if monitor_id in self.estimators.keys():
+            if monitor_id in self.estimators:
                 continue
 
             camera_index = config["camera_index"]
@@ -648,7 +680,7 @@ class GazeTracker:
             if config["camera_index"] == camera_index
         ]
         for monitor_id in affected_monitors:
-            if monitor_id in self.estimators.keys():
+            if monitor_id in self.estimators:
                 logger.debug(
                     f"Removing estimator for monitor {monitor_id} due to camera release"
                 )
@@ -675,6 +707,8 @@ class GazeTracker:
                 "top": m.y,
                 "right": m.x + m.width,
                 "bottom": m.y + m.height,
+                "width": m.width,
+                "height": m.height,
             }
             for i, m in enumerate(current_monitors)
         ]
