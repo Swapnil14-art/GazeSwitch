@@ -1,7 +1,6 @@
 from unittest.mock import MagicMock, patch
 
 from trackers.eyetrax_tracker import EyeTraxWrapper
-from trackers.gaze_follower_tracker import GazeFollowerWrapper
 
 
 def test_preload_model_calls_load_model_eyetrax():
@@ -28,17 +27,3 @@ def test_preload_model_does_not_load_when_model_not_ready_eyetrax():
             tracker.preload_model()
             mock_load.assert_not_called()
             assert tracker.model_loaded is False
-
-
-def test_preload_model_calls_load_model_gazefollower():
-    tracker = GazeFollowerWrapper()
-
-    # Mock gaze_follower to simulate the internal model/calibration object
-    fake_gf = MagicMock()
-    tracker.gaze_follower = fake_gf
-
-    # Call preload (currently a no-op)
-    tracker.preload_model()
-
-    # Assert that no unexpected method was called
-    fake_gf.assert_not_called()

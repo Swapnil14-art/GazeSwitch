@@ -1,8 +1,5 @@
 # Local modifications to pip-installed libraries
 
-- **`gazefollower/calibration/SVRCalibration.py`**  
-  - Modified SVM loading to use `cv.ml.SVM_load()` instead of `create().load()` for compatibility with newer OpenCV versions.
-
 - **`eyetrax/models/__init__.py`**  
   - Replaced filesystem-based module discovery (`Path.iterdir()`) with:
     ```python

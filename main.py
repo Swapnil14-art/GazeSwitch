@@ -33,7 +33,7 @@ def setup_logging():
     handler.setFormatter(formatter)
 
     root = logging.getLogger()
-    root.setLevel(logging.DEBUG)
+    root.setLevel(logging.INFO)
     root.addHandler(handler)
 
     logging.info("Application starting")

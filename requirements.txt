@@ -5,7 +5,6 @@ pytest
 ruff
 screeninfo
 pynput
-gazefollower
 numpy<2
 
 # For multi-monitor support, a fork of EyeTrax is used that includes the required changes
