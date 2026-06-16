@@ -9,7 +9,7 @@ numpy<2
 
 # For multi-monitor support, a fork of EyeTrax is used that includes the required changes
 # to handle calibration on multiple monitors
-eyetrax @ git+https://github.com/maciejrytlewski/EyeTrax@multi-monitor-calibration
+eyetrax @ git+https://github.com/maciejrytlewski/EyeTrax@gazecontrol-main
 
 # Windows-only dependencies
 pystray; sys_platform == "win32"
