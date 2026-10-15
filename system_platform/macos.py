@@ -11,7 +11,7 @@ class MacOSWindowManager(WindowManager):
     def windows_at_point(self, x: int, y: int, windows: list[dict]) -> list[dict]:
         raise NotImplementedError("Only works on MacOS")
 
-    def focus_window(self, window: dict) -> None:
+    def focus_window(self, window: dict, point: tuple[int, int] | None = None) -> None:
         raise NotImplementedError("Only works on MacOS")
 
     def get_screen_size(self) -> tuple[int, int]:

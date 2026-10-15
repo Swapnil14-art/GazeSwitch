@@ -18,15 +18,15 @@ class DwellLearner:
     user's natural gaze behaviour while avoiding accidental focuses.
     """
 
-    MIN_DWELL = 0.2
-    MAX_DWELL = 1.2
+    MIN_DWELL = 0.08
+    MAX_DWELL = 0.20
     LEARNING_RATE = 0.05
     SUCCESS_STREAK = 3
 
     REGRET_MULTIPLIER = 1.5
     SUCCESS_MULTIPLIER = 1.0
 
-    def __init__(self, base_dwell=0.5, learning_rate=None, debug=False):
+    def __init__(self, base_dwell=0.12, learning_rate=None, debug=False):
         self.debug = debug
         self.dwell = base_dwell
         self.learning_rate = learning_rate or self.LEARNING_RATE

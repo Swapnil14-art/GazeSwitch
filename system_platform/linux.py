@@ -155,7 +155,7 @@ class LinuxWindowManager(WindowManager):
 
         return windows
 
-    def focus_window(self, window: dict) -> None:
+    def focus_window(self, window: dict, point: tuple[int, int] | None = None) -> None:
         if self.server == "x11":
             try:
                 self.ewmh.setActiveWindow(window["hwnd"])

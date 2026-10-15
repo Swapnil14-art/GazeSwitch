@@ -4,3 +4,6 @@ fixable = ["ALL"]
 
 [tool.ruff.format]
 quote-style = "double"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

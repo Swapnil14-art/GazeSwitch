@@ -11,19 +11,19 @@ from core.dwell_learner import DwellLearner
 from system_platform.config import load_config, save_config
 from system_platform.window_manager import WindowManager
 from trackers.base_tracker import BaseTracker
-from trackers.eyetrax_tracker import EyeTraxWrapper
+from trackers.eyetrax_tracker import EyeTraxWrapper, clear_frame_cache
 
 logger = logging.getLogger(__name__)
 
-DWELL_TIME = 0.5  # seconds
-TYPING_IDLE_TIME = 1.0  # seconds
-POLL_INTERVAL = 0.05  # seconds
+DWELL_TIME = 0.12  # seconds (120 ms response time for fast reliable switching)
+TYPING_IDLE_TIME = 0.8  # seconds (inhibit eye sensor while typing)
+POLL_INTERVAL = 0.02  # seconds (50 Hz poll rate for millisecond responsiveness)
 CYCLE_RESET_TIME = 1.5  # seconds
 MONITOR_CHECK_INTERVAL = 10.0  # seconds
 DEFAULT_CAMERA_INDEX = 0
 DEFAULT_MANUAL_OVERRIDE_HOTKEY = "<alt>+\\"
-DEFAULT_CYCLE_WINDOWS_HOTKEY = "<alt>+]"
-DEFAULT_CYCLE_WINDOWS_REVERSE_HOTKEY = "<alt>+["
+DEFAULT_CYCLE_WINDOWS_HOTKEY = "<alt>+<tab>"
+DEFAULT_CYCLE_WINDOWS_REVERSE_HOTKEY = "<alt>+<shift>+<tab>"
 
 # REGRET_WINDOW and SUCCESS_WINDOW define how user behaviour is interpreted.
 # They are not hard thresholds, but are used to derive signal strength
@@ -143,7 +143,7 @@ class GazeTracker:
         # Runtime state
         self.running = False
         self.current_window = None
-        self.last_keystroke_time = time.time()
+        self.last_keystroke_time = 0.0
 
         # Input listeners
         self.keyboard_listener = keyboard.Listener(on_press=self._on_key_press)
@@ -180,8 +180,8 @@ class GazeTracker:
 
         # Adaptive dwell learning state.
         # The learner dynamically adjusts the gaze dwell threshold based on
-        # user behaviour (regret events vs successful focuses).
-        initial_dwell = self.config.get("adaptive_dwell", DWELL_TIME)
+        saved_dwell = self.config.get("adaptive_dwell", DWELL_TIME)
+        initial_dwell = min(saved_dwell, 0.15) if saved_dwell else DWELL_TIME
         self.dwell_learner = DwellLearner(initial_dwell)
 
         # Track last automatic focus so we can detect regret or success
@@ -192,6 +192,10 @@ class GazeTracker:
         self._tracker_last_target = None
         self._tracker_gaze_dwell_start = 0.0
         self._tracker_intent_idle_since = 0.0
+
+        # Calibration state
+        self.is_calibrating = False
+        self._calib_lock = threading.Lock()
 
     def _normalise_monitor_camera_mapping(
         self,
@@ -272,13 +276,21 @@ class GazeTracker:
         if self.hotkey_listener:
             self.hotkey_listener.stop()
 
-        self.hotkey_listener = keyboard.GlobalHotKeys(
-            {
-                self.manual_override_hotkey: self._manual_override,
-                self.cycle_windows_hotkey: self._cycle_windows,
-                self.cycle_windows_reverse_hotkey: self._cycle_windows_reverse,
-            }
-        )
+        hotkeys = {
+            self.manual_override_hotkey: self._manual_override,
+            self.cycle_windows_hotkey: self._cycle_windows,
+            self.cycle_windows_reverse_hotkey: self._cycle_windows_reverse,
+        }
+        if "<alt>+<tab>" not in hotkeys:
+            hotkeys["<alt>+<tab>"] = self._cycle_windows
+        if "<alt>+<shift>+<tab>" not in hotkeys:
+            hotkeys["<alt>+<shift>+<tab>"] = self._cycle_windows_reverse
+        if "<alt>+]" not in hotkeys:
+            hotkeys["<alt>+]"] = self._cycle_windows
+        if "<alt>+[" not in hotkeys:
+            hotkeys["<alt>+["] = self._cycle_windows_reverse
+
+        self.hotkey_listener = keyboard.GlobalHotKeys(hotkeys)
         self.hotkey_listener.start()
 
     def _manual_override(self):
@@ -364,6 +376,11 @@ class GazeTracker:
 
         window_stack = self.wm.windows_at_point(x, y, windows)
 
+        # Alt+Tab functionality: If there are not multiple overlapping windows
+        # under the gaze point, cycle through all open application windows
+        if len(window_stack) <= 1:
+            window_stack = windows
+
         if len(window_stack) <= 1:
             return
 
@@ -397,7 +414,8 @@ class GazeTracker:
 
         logger.info(f"Cycling focus to: {next_window.get('title')}")
 
-        self.wm.focus_window(next_window)
+        point = (x, y) if (x != 0 or y != 0) else None
+        self.wm.focus_window(next_window, point=point)
         self.current_window = next_window
 
     def _same_window(self, a: dict | None, b: dict | None) -> bool:
@@ -479,17 +497,20 @@ class GazeTracker:
                 estimator = self.estimators.pop(monitor_id)
                 estimator.stop()
 
-        # Set up new cameras
+        # Set up or reopen cameras
         for monitor_id, config in monitor_camera_mapping.items():
             enabled = config.get("enabled")
             camera_index = config.get("camera_index")
 
-            if (
-                enabled
-                and camera_index is not None
-                and camera_index not in self.camera_cap_mapping
-            ):
-                self.camera_cap_mapping[camera_index] = cv2.VideoCapture(camera_index)
+            if enabled and camera_index is not None:
+                cap = self.camera_cap_mapping.get(camera_index)
+                if not cap or not cap.isOpened():
+                    try:
+                        self.camera_cap_mapping[camera_index] = cv2.VideoCapture(
+                            camera_index
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to open camera {camera_index}: {e}")
 
         # Update estimators
         for monitor_id, config in monitor_camera_mapping.items():
@@ -499,35 +520,52 @@ class GazeTracker:
             estimator_exists = monitor_id in self.estimators
 
             if enabled:
-                # Case 1: Monitor newly enabled (no estimator yet)
+                cap = self.camera_cap_mapping.get(camera_index)
+                if not cap or not cap.isOpened():
+                    logger.warning(
+                        f"Camera {camera_index} not available for monitor "
+                        f"{monitor_id}, skipping estimator creation"
+                    )
+                    if estimator_exists:
+                        del self.estimators[monitor_id]
+                    continue
+
+                screen_w = (
+                    self.monitor_rects[monitor_id]["width"]
+                    if monitor_id < len(self.monitor_rects)
+                    else 1920
+                )
+                screen_h = (
+                    self.monitor_rects[monitor_id]["height"]
+                    if monitor_id < len(self.monitor_rects)
+                    else 1080
+                )
+
                 if not estimator_exists:
-                    cap = self.camera_cap_mapping.get(camera_index)
-                    if not cap:
-                        logger.warning(
-                            f"Camera {camera_index} not available for monitor "
-                            f"{monitor_id}, skipping estimator creation"
-                        )
-                        continue
                     estimator = EyeTraxWrapper(
                         cap=cap,
                         monitor_index=monitor_id,
-                        screen_width=self.monitor_rects[monitor_id]["width"],
-                        screen_height=self.monitor_rects[monitor_id]["height"],
+                        screen_width=screen_w,
+                        screen_height=screen_h,
                     )
+                    if estimator.is_ready():
+                        estimator.preload_model()
+                    if self.running:
+                        estimator.start()
                     self.estimators[monitor_id] = estimator
                 else:
-                    # Case 2: Monitor stays enabled, but camera might have changed
-                    old_camera_index = self.monitor_camera_mapping[monitor_id].get(
-                        "camera_index"
-                    )
+                    old_camera_index = self.monitor_camera_mapping.get(
+                        monitor_id, {}
+                    ).get("camera_index")
                     if camera_index != old_camera_index:
-                        # Camera changed - update the estimator's camera reference
-                        cap = self.camera_cap_mapping.get(camera_index)
                         self.estimators[monitor_id].cap = cap
+                        self.estimators[monitor_id].preload_camera()
+                        if self.running:
+                            self.estimators[monitor_id].start()
             else:
-                # Case 3: Monitor now disabled
                 if estimator_exists:
-                    del self.estimators[monitor_id]
+                    estimator = self.estimators.pop(monitor_id)
+                    estimator.stop()
 
         # Update local state and persist
         self.monitor_camera_mapping = monitor_camera_mapping
@@ -589,18 +627,100 @@ class GazeTracker:
         """
         Starts the calibration process.
 
+        Temporarily pauses tracking and releases camera capture handles so that
+        the calibration routine (which opens its own cv2.VideoCapture) can access
+        the camera device exclusively. Re-acquires cameras and resumes tracking
+        upon completion.
+
         Args:
             monitor_id (int, optional): The monitor to run calibration for.
             Defaults to None.
         """
-        if monitor_id is None:
-            for m_id, estimator in self.estimators.items():
-                camera_index = self.monitor_camera_mapping[m_id]["camera_index"]
-                estimator.calibrate(camera_index)
-        else:
-            camera_index = self.monitor_camera_mapping[monitor_id]["camera_index"]
-            estimator = self.estimators[monitor_id]
-            estimator.calibrate(camera_index)
+        if not self._calib_lock.acquire(blocking=False):
+            self.wm.notify("Calibration is already in progress!")
+            logger.warning("Calibration attempt blocked: already in progress")
+            return
+
+        was_running = self.running
+        if was_running:
+            self.stop_tracking()
+            time.sleep(0.1)
+
+        try:
+            self.is_calibrating = True
+            # Determine monitors to calibrate
+            if monitor_id is None:
+                target_monitors = [
+                    m["id"]
+                    for m in self.monitor_rects
+                    if self.monitor_camera_mapping.get(m["id"], {}).get("enabled", True)
+                ]
+            else:
+                target_monitors = [monitor_id]
+
+            if not target_monitors:
+                self.wm.notify("No enabled monitors to calibrate!")
+                return
+
+            for m_id in target_monitors:
+                config = self.monitor_camera_mapping.get(m_id, {})
+                camera_index = config.get("camera_index", DEFAULT_CAMERA_INDEX)
+
+                # Release our open capture so calibration can open it exclusively
+                if camera_index in self.camera_cap_mapping:
+                    old_cap = self.camera_cap_mapping.pop(camera_index, None)
+                    if old_cap:
+                        clear_frame_cache(id(old_cap))
+                        try:
+                            old_cap.release()
+                        except Exception as e:
+                            logger.debug(
+                                f"Error releasing camera {camera_index} for calib: {e}"
+                            )
+
+                    time.sleep(0.2)
+
+                # Ensure estimator exists
+                if m_id not in self.estimators:
+                    screen_w = (
+                        self.monitor_rects[m_id]["width"]
+                        if m_id < len(self.monitor_rects)
+                        else 1920
+                    )
+                    screen_h = (
+                        self.monitor_rects[m_id]["height"]
+                        if m_id < len(self.monitor_rects)
+                        else 1080
+                    )
+                    self.estimators[m_id] = EyeTraxWrapper(
+                        cap=None,
+                        monitor_index=m_id,
+                        screen_width=screen_w,
+                        screen_height=screen_h,
+                    )
+
+                estimator = self.estimators[m_id]
+                logger.info(
+                    f"Running calibration on monitor {m_id} with camera {camera_index}"
+                )
+                try:
+                    estimator.calibrate(camera_index)
+                except Exception as e:
+                    logger.exception(f"Calibration failed for monitor {m_id}: {e}")
+                    self.wm.notify(f"Calibration failed on monitor {m_id}: {e}")
+                finally:
+                    # Reacquire camera handle after calibration finishes
+                    new_cap = cv2.VideoCapture(camera_index)
+                    self.camera_cap_mapping[camera_index] = new_cap
+                    estimator.cap = new_cap
+                    estimator.preload_camera()
+
+            self.wm.notify("Calibration completed!")
+        finally:
+            self.is_calibrating = False
+            self._calib_lock.release()
+            if was_running:
+                self.start_tracking()
 
     def start_tracking(self):
         """
@@ -615,7 +735,7 @@ class GazeTracker:
             if not config.get("enabled"):
                 continue
 
-            camera_index = config["camera_index"]
+            camera_index = config.get("camera_index", DEFAULT_CAMERA_INDEX)
 
             cap = self.camera_cap_mapping.get(camera_index)
             if not cap or not cap.isOpened():
@@ -628,24 +748,52 @@ class GazeTracker:
             if monitor_id in self.estimators:
                 continue
 
-            camera_index = config["camera_index"]
+            camera_index = config.get("camera_index", DEFAULT_CAMERA_INDEX)
             cap = self.camera_cap_mapping[camera_index]
+            screen_w = (
+                self.monitor_rects[monitor_id]["width"]
+                if monitor_id < len(self.monitor_rects)
+                else 1920
+            )
+            screen_h = (
+                self.monitor_rects[monitor_id]["height"]
+                if monitor_id < len(self.monitor_rects)
+                else 1080
+            )
 
             self.estimators[monitor_id] = EyeTraxWrapper(
                 cap=cap,
                 monitor_index=monitor_id,
-                screen_width=self.monitor_rects[monitor_id]["width"],
-                screen_height=self.monitor_rects[monitor_id]["height"],
+                screen_width=screen_w,
+                screen_height=screen_h,
             )
 
-        for estimator in self.estimators.values():
-            if not estimator.is_ready():
-                self.wm.notify("Calibration required before Tracking!")
-                logger.warning("Calibration required before Tracking")
+        enabled_monitor_ids = [
+            m_id
+            for m_id, cfg in self.monitor_camera_mapping.items()
+            if cfg.get("enabled", True)
+        ]
+
+        if not enabled_monitor_ids:
+            self.wm.notify("No enabled monitors to track!")
+            logger.warning("No enabled monitors configured for tracking")
+            return
+
+        for monitor_id in enabled_monitor_ids:
+            estimator = self.estimators.get(monitor_id)
+            if not estimator or not estimator.is_ready():
+                self.wm.notify(
+                    f"Calibration required for monitor {monitor_id} before Tracking!"
+                )
+                logger.warning(
+                    f"Calibration required for monitor {monitor_id} before Tracking"
+                )
                 return
 
-        for estimator in self.estimators.values():
-            estimator.start()
+        for monitor_id in enabled_monitor_ids:
+            estimator = self.estimators.get(monitor_id)
+            if estimator:
+                estimator.start()
 
         self.running = True
         Thread(target=self._run_tracker, daemon=True).start()
@@ -657,8 +805,6 @@ class GazeTracker:
         Stop the gaze tracking process.
         """
         self.running = False
-        if self.monitor_listener:
-            self.monitor_listener.stop()
         logger.info("Tracking stopped")
 
     def release_camera(self, camera_index: int):
@@ -677,7 +823,7 @@ class GazeTracker:
         affected_monitors = [
             m_id
             for m_id, config in self.monitor_camera_mapping.items()
-            if config["camera_index"] == camera_index
+            if config.get("camera_index") == camera_index
         ]
         for monitor_id in affected_monitors:
             if monitor_id in self.estimators:
@@ -687,8 +833,13 @@ class GazeTracker:
                 estimator = self.estimators.pop(monitor_id)
                 estimator.stop()
 
-        self.camera_cap_mapping[camera_index].release()
-        del self.camera_cap_mapping[camera_index]
+        cap = self.camera_cap_mapping.pop(camera_index, None)
+        if cap:
+            clear_frame_cache(id(cap))
+            try:
+                cap.release()
+            except Exception as e:
+                logger.debug(f"Error releasing camera {camera_index}: {e}")
         self.wm.notify("Camera released")
         logger.info("Camera released")
 
@@ -721,6 +872,17 @@ class GazeTracker:
         self.virtual_width = self.virtual_right - self.virtual_left
         self.virtual_height = self.virtual_bottom - self.virtual_top
 
+        # Update geometry on existing estimators
+        for m in self.monitor_rects:
+            m_id = m["id"]
+            if m_id in self.estimators:
+                est = self.estimators[m_id]
+                est.screen_width = m["width"]
+                est.screen_height = m["height"]
+                if hasattr(est, "smoother") and hasattr(est.smoother, "sw"):
+                    est.smoother.sw = m["width"]
+                    est.smoother.sh = m["height"]
+
     def _get_monitor_at_position(self, x: int, y: int) -> dict | None:
         """
         Find which monitor contains the given screen coordinates.
@@ -735,8 +897,8 @@ class GazeTracker:
         """
         for monitor in self.monitor_rects:
             if (
-                monitor["left"] < x < monitor["right"]
-                and monitor["top"] < y < monitor["bottom"]
+                monitor["left"] <= x <= monitor["right"]
+                and monitor["top"] <= y <= monitor["bottom"]
             ):
                 return monitor
         return None
@@ -746,6 +908,13 @@ class GazeTracker:
         Shutdown the tracker by stopping tracking and releasing resources.
         """
         self.stop_tracking()
+
+        if self.monitor_listener:
+            try:
+                self.monitor_listener.stop()
+                logger.info("Monitor listener stopped")
+            except Exception as e:
+                logger.exception(f"Error stopping monitor listener: {e}")
 
         if self.keyboard_listener:
             try:
@@ -764,6 +933,7 @@ class GazeTracker:
         for camera_index in list(self.camera_cap_mapping.keys()):
             self.release_camera(camera_index)
 
+        clear_frame_cache()
         logger.info("Tracker shutdown complete")
 
     def _run_tracker_step(self):
@@ -804,27 +974,60 @@ class GazeTracker:
         # Try each estimator and use the one where gaze falls within the monitor bounds
         x = y = None
         for monitor_id, estimator in self.estimators.items():
+            if not self.monitor_camera_mapping.get(monitor_id, {}).get("enabled", True):
+                continue
+            if not estimator.is_camera_ready():
+                continue
+            if monitor_id >= len(self.monitor_rects):
+                continue
             monitor = self.monitor_rects[monitor_id]
-            data = estimator.get_data()
+            try:
+                data = estimator.get_data()
+            except Exception as e:
+                logger.debug(f"Estimator error on monitor {monitor_id}: {e}")
+                continue
             gx, gy = data["gaze"]["x"], data["gaze"]["y"]
             if gx is not None and gy is not None:
                 x_virt, y_virt = gx + monitor["left"], gy + monitor["top"]
 
                 # Only use this gaze data if it falls within this monitor's bounds
                 if (
-                    monitor["left"] < x_virt < monitor["right"]
-                    and monitor["top"] < y_virt < monitor["bottom"]
+                    monitor["left"] <= x_virt <= monitor["right"]
+                    and monitor["top"] <= y_virt <= monitor["bottom"]
                 ):
                     x, y = x_virt, y_virt
                     break
 
-        # Determine if the user is actively typing or not
-        typing_idle = (now - self.last_keystroke_time) >= TYPING_IDLE_TIME
+        with self._hotkey_state_lock:
+            manual_override = self.manual_override_triggered
 
-        if not typing_idle:
+        # Determine if the user is actively typing or not.
+        # When typing, remove/inhibit the eye sensor so it does not interfere
+        # with or change window focus during typing (unless manual override).
+        if not manual_override and (now - self.last_keystroke_time) < TYPING_IDLE_TIME:
+            self._tracker_last_target = None
+            self._tracker_gaze_dwell_start = 0.0
             self._tracker_intent_idle_since = 0.0
-        elif self._tracker_intent_idle_since == 0.0:
-            self._tracker_intent_idle_since = now
+            time.sleep(POLL_INTERVAL)
+            return
+
+        # Cycling is handled immediately (Alt+Tab style window cycling)
+        with self._hotkey_state_lock:
+            cycle_triggered = (
+                self.cycle_forward_triggered or self.cycle_reverse_triggered
+            )
+            reverse = self.cycle_reverse_triggered
+            if cycle_triggered:
+                self.cycle_forward_triggered = False
+                self.cycle_reverse_triggered = False
+
+        if cycle_triggered:
+            windows = self.wm.get_windows()
+            gx = int(x) if x is not None else 0
+            gy = int(y) if y is not None else 0
+            self._cycle_windows_at_gaze(gx, gy, windows, reverse=reverse)
+            time.sleep(POLL_INTERVAL)
+            return
 
         if x is not None and y is not None:
             # Check if gaze falls within any actual monitor's bounds
@@ -836,29 +1039,6 @@ class GazeTracker:
 
             logger.debug(f"Predicted gaze at: ({x}, {y}) on monitor {monitor['id']}")
             windows = self.wm.get_windows()
-
-            # Cycling is handled immediately and independently of the normal
-            # dwell/intent logic because it is an explicit user action.
-            with self._hotkey_state_lock:
-                cycle_triggered = (
-                    self.cycle_forward_triggered or self.cycle_reverse_triggered
-                )
-
-                if cycle_triggered:
-                    reverse = self.cycle_reverse_triggered
-                    self._cycle_windows_at_gaze(
-                        int(x), int(y), windows, reverse=reverse
-                    )
-
-                    self.cycle_forward_triggered = False
-                    self.cycle_reverse_triggered = False
-
-                    # Skip the rest of the gaze intent logic this frame to avoid the
-                    # dwell-based focusing logic triggering immediately after cycling.
-                    # Cycling is an explicit user action and should not be followed by
-                    # automatic focus logic in the same iteration.
-                    time.sleep(POLL_INTERVAL)
-                    return
 
             target_window = self.wm.window_at_point(int(x), int(y), windows)
 
@@ -875,26 +1055,16 @@ class GazeTracker:
 
                 # Check intent conditions
                 gaze_dwell = now - self._tracker_gaze_dwell_start
-                intent_idle = (
-                    now - self._tracker_intent_idle_since
-                    if self._tracker_intent_idle_since > 0.0
-                    else 0.0
-                )
 
-                # Debug line to monitor dwell, idle, and threshold
+                # Debug line to monitor dwell and threshold
                 dwell_threshold = self.dwell_learner.get()
-                logger.debug(
-                    f"dwell={gaze_dwell:.2f} "
-                    f"idle={intent_idle:.2f} "
-                    f"threshold={dwell_threshold:.2f}"
-                )
+                logger.debug(f"dwell={gaze_dwell:.2f} threshold={dwell_threshold:.2f}")
 
                 with self._hotkey_state_lock:
                     manual_override = self.manual_override_triggered
 
                 if manual_override or (
                     gaze_dwell >= dwell_threshold
-                    and intent_idle >= TYPING_IDLE_TIME
                     and (
                         not self.current_window
                         or not self._same_window(target_window, self.current_window)
@@ -908,7 +1078,7 @@ class GazeTracker:
                         f"Adaptive dwell threshold: {self.dwell_learner.get():.2f}s"
                     )
 
-                    self.wm.focus_window(target_window)
+                    self.wm.focus_window(target_window, point=(int(x), int(y)))
                     self.current_window = target_window
 
                     self.last_auto_focus_time = now

@@ -12,6 +12,8 @@ from system_platform.window_manager import WindowManager
 from ui.tray import create_tray_icon
 
 warnings.filterwarnings("ignore", category=UserWarning, module="google.protobuf")
+warnings.filterwarnings("ignore", category=RuntimeWarning, module=".*kde.*")
+warnings.filterwarnings("ignore", category=RuntimeWarning, module=".*eyetrax.*")
 
 root = tk.Tk()
 root.withdraw()

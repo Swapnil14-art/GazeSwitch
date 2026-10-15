@@ -56,7 +56,7 @@ def capture_hotkey(on_complete):
         if hasattr(main_key, "char") and main_key.char and main_key.char.isprintable():  # type: ignore
             key_name = main_key.char.lower()  # type: ignore
         elif hasattr(main_key, "name") and main_key.name:  # type: ignore
-            key_name = main_key.name  # type: ignore
+            key_name = f"<{main_key.name}>"  # type: ignore
         else:
             listener.stop()
             return  # invalid main key

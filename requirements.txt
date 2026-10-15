@@ -17,6 +17,7 @@ pywin32; sys_platform == "win32"
 winotify; sys_platform == "win32"
 pyinstaller; sys_platform == "win32"
 pygrabber; sys_platform == "win32"
+comtypes; sys_platform == "win32"
 
 # Linux-only dependencies
 notify2; sys_platform == "linux"

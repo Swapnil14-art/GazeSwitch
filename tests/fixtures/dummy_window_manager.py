@@ -33,8 +33,11 @@ class DummyWindowManager(WindowManager):
                 result.append(w)
         return result
 
-    def focus_window(self, window: Dict) -> None:
+    def focus_window(
+        self, window: Dict, point: Optional[Tuple[int, int]] = None
+    ) -> None:
         self.focused_window = window
+        self.focused_point = point
 
     def get_screen_size(self) -> Tuple[int, int]:
         return self.screen_size

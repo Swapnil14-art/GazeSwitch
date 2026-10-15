@@ -31,7 +31,7 @@ class WindowManager(ABC):
 
     def _point_in_rect(self, x, y, rect):
         left, top, right, bottom = rect
-        return left < x < right and top < y < bottom
+        return left <= x < right and top <= y < bottom
 
     def window_at_point(self, x: int, y: int, windows: list[dict]) -> dict | None:
         """
@@ -65,12 +65,13 @@ class WindowManager(ABC):
         return [w for w in windows if self._point_in_rect(x, y, w["rect"])]
 
     @abstractmethod
-    def focus_window(self, window: dict) -> None:
+    def focus_window(self, window: dict, point: tuple[int, int] | None = None) -> None:
         """
-        Bring the specified window to the foreground.
+        Bring the specified window to the foreground and select typing option.
 
         Args:
             window (dict): The window to focus.
+            point (tuple[int, int], optional): Screen coordinates (x, y) of gaze.
         """
         pass
 
