@@ -201,46 +201,29 @@ def preview_camera(
     )
     status_label.pack(pady=(0, 6))
 
-    borrowed_cap = False
-    if (
-        camera_index in tracker.camera_cap_mapping
-        and tracker.camera_cap_mapping[camera_index].isOpened()
-    ):
-        cap = tracker.camera_cap_mapping[camera_index]
-        borrowed_cap = True
-    else:
-        cap = cv2.VideoCapture(camera_index)
-        borrowed_cap = False
-
-    if not cap or not cap.isOpened():
-        status_var.set("Camera unavailable or in use by another app.")
-
     is_active = [True]
 
     def update_frame():
         if not is_active[0]:
             return
-        if cap and cap.isOpened():
-            ret, frame = cap.read()
-            if ret and frame is not None:
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                h, w, _ = frame_rgb.shape
-                target_w = 420
-                target_h = int(h * (target_w / w))
-                frame_resized = cv2.resize(frame_rgb, (target_w, target_h))
-                img = Image.fromarray(frame_resized)
-                imgtk = ImageTk.PhotoImage(image=img)
-                label.imgtk = imgtk
-                label.configure(image=imgtk)
-                status_var.set(f"Live Video ({w}×{h})")
-            else:
-                status_var.set("Waiting for video frames...")
-            preview_win.after(33, update_frame)
+        ret, frame = tracker.get_preview_frame(camera_index)
+        if ret and frame is not None:
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            h, w, _ = frame_rgb.shape
+            target_w = 420
+            target_h = int(h * (target_w / w))
+            frame_resized = cv2.resize(frame_rgb, (target_w, target_h))
+            img = Image.fromarray(frame_resized)
+            imgtk = ImageTk.PhotoImage(image=img)
+            label.imgtk = imgtk
+            label.configure(image=imgtk)
+            status_var.set(f"Live Video ({w}×{h})")
+        else:
+            status_var.set("Waiting for video frames...")
+        preview_win.after(33, update_frame)
 
     def close_preview():
         is_active[0] = False
-        if not borrowed_cap and cap and cap.isOpened():
-            cap.release()
         preview_win.destroy()
 
     btn_frame = tk.Frame(preview_win, bg="#0f172a")
@@ -248,8 +231,7 @@ def preview_camera(
     ttk.Button(btn_frame, text="Close Preview", command=close_preview).pack()
 
     preview_win.protocol("WM_DELETE_WINDOW", close_preview)
-    if cap and cap.isOpened():
-        preview_win.after(40, update_frame)
+    preview_win.after(40, update_frame)
 
 
 _active_config_window: tk.Toplevel | None = None
@@ -716,12 +698,11 @@ def change_hotkey(icon, tracker: GazeTracker, hotkey_type: str):
 def exit_app(icon, _, tracker: GazeTracker, root: tk.Tk):
     """
     Exit the application by stopping tracking, the tray icon, and
-    the Tkinter root window.
+    the Tkinter root window safely on the Tk main thread.
     """
     try:
         tracker.shutdown()
     except Exception as e:
         logger.exception(f"Error during tracker shutdown on exit: {e}")
     icon.stop()
-    root.quit()
-    root.destroy()
+    root.after(0, lambda: (root.quit(), root.destroy()))

@@ -19,13 +19,22 @@ class MonitorListener(ABC):
 
 class WindowManager(ABC):
     @abstractmethod
-    def get_windows(self) -> list[dict]:
+    def get_windows(self, force_refresh: bool = False) -> list[dict]:
         """
         Get a list of all visible windows with their handles, titles, and rectangles.
+
+        Args:
+            force_refresh (bool): If True, bypass cache and query OS directly.
 
         Returns:
             list[dict]: A list of dictionaries containing window handles, titles,
             and rectangles.
+        """
+        pass
+
+    def invalidate_window_cache(self) -> None:
+        """
+        Invalidate cached window list so subsequent queries refresh from OS.
         """
         pass
 

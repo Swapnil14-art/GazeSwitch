@@ -15,6 +15,22 @@ warnings.filterwarnings("ignore", category=UserWarning, module="google.protobuf"
 warnings.filterwarnings("ignore", category=RuntimeWarning, module=".*kde.*")
 warnings.filterwarnings("ignore", category=RuntimeWarning, module=".*eyetrax.*")
 
+# Enable Per-Monitor DPI Awareness V2 on Windows before initializing GUI
+if sys.platform.startswith("win"):
+    try:
+        import ctypes
+
+        # DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4
+        ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
+    except Exception:
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        except Exception:
+            try:
+                ctypes.windll.user32.SetProcessDPIAware()
+            except Exception:
+                pass
+
 root = tk.Tk()
 root.withdraw()
 

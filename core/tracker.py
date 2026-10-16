@@ -2,8 +2,9 @@ import logging
 import threading
 import time
 from threading import Thread
+from typing import Any
 
-import cv2
+import cv2  # noqa: F401
 from pynput import keyboard
 from screeninfo import get_monitors
 
@@ -11,7 +12,11 @@ from core.dwell_learner import DwellLearner
 from system_platform.config import load_config, save_config
 from system_platform.window_manager import WindowManager
 from trackers.base_tracker import BaseTracker
-from trackers.eyetrax_tracker import EyeTraxWrapper, clear_frame_cache
+from trackers.eyetrax_tracker import (
+    EyeTraxWrapper,
+    SharedCameraCapture,
+    clear_frame_cache,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +82,7 @@ class GazeTracker:
             if config.get("enabled") and config.get("camera_index") is not None
         }
         self.camera_cap_mapping = {
-            camera_index: cv2.VideoCapture(camera_index)
+            camera_index: SharedCameraCapture(camera_index)
             for camera_index in unique_cameras
         }
 
@@ -103,7 +108,7 @@ class GazeTracker:
             camera_index = config.get("camera_index", DEFAULT_CAMERA_INDEX)
             cap = self.camera_cap_mapping.get(camera_index)
 
-            if not enabled:
+            if not enabled or monitor_id >= len(self.monitor_rects):
                 continue
 
             if not cap:
@@ -203,7 +208,7 @@ class GazeTracker:
     ) -> dict[int, dict[str, bool | int]]:
         """
         Synchronise monitor configuration with the monitors currently detected
-        by the OS.
+        by the OS, preserving configurations for disconnected monitors.
 
         Args:
             monitor_camera_mapping (dict[int, dict[str, bool  |  int]] | None,
@@ -212,17 +217,12 @@ class GazeTracker:
         Returns:
             dict[int, dict[str, bool | int]]: The synchronised monitor-camera mapping.
         """
-        valid_monitor_ids = {monitor["id"] for monitor in self.monitor_rects}
-
         saved_mapping = monitor_camera_mapping or self.config.get(
             "monitor_camera_mapping", {}
         )
 
-        normalised = {
-            monitor_id: config
-            for monitor_id, config in saved_mapping.items()
-            if monitor_id in valid_monitor_ids
-        }
+        # Retain all saved configs so disconnecting a monitor does not lose its settings
+        normalised = dict(saved_mapping)
 
         for monitor in self.monitor_rects:
             normalised.setdefault(
@@ -497,7 +497,7 @@ class GazeTracker:
                 estimator = self.estimators.pop(monitor_id)
                 estimator.stop()
 
-        # Set up or reopen cameras
+        # Set up or reopen cameras using SharedCameraCapture
         for monitor_id, config in monitor_camera_mapping.items():
             enabled = config.get("enabled")
             camera_index = config.get("camera_index")
@@ -506,7 +506,7 @@ class GazeTracker:
                 cap = self.camera_cap_mapping.get(camera_index)
                 if not cap or not cap.isOpened():
                     try:
-                        self.camera_cap_mapping[camera_index] = cv2.VideoCapture(
+                        self.camera_cap_mapping[camera_index] = SharedCameraCapture(
                             camera_index
                         )
                     except Exception as e:
@@ -567,8 +567,11 @@ class GazeTracker:
                     estimator = self.estimators.pop(monitor_id)
                     estimator.stop()
 
-        # Update local state and persist
-        self.monitor_camera_mapping = monitor_camera_mapping
+        # Update local state and persist, preserving configs for any
+        # disconnected monitors
+        merged_mapping = dict(self.config.get("monitor_camera_mapping", {}))
+        merged_mapping.update(monitor_camera_mapping)
+        self.monitor_camera_mapping = merged_mapping
         self.config["monitor_camera_mapping"] = self.monitor_camera_mapping
         save_config(self.config)
 
@@ -704,18 +707,33 @@ class GazeTracker:
                     f"Running calibration on monitor {m_id} with camera {camera_index}"
                 )
                 try:
-                    estimator.calibrate(camera_index)
+                    calib_ok = estimator.calibrate(camera_index)
+                    if calib_ok:
+                        self.wm.notify(f"Calibration completed for monitor {m_id}!")
+                    else:
+                        self.wm.notify(
+                            f"Calibration cancelled on monitor {m_id}. "
+                            "Previous model preserved."
+                        )
                 except Exception as e:
                     logger.exception(f"Calibration failed for monitor {m_id}: {e}")
                     self.wm.notify(f"Calibration failed on monitor {m_id}: {e}")
                 finally:
                     # Reacquire camera handle after calibration finishes
-                    new_cap = cv2.VideoCapture(camera_index)
+                    new_cap = SharedCameraCapture(camera_index)
                     self.camera_cap_mapping[camera_index] = new_cap
-                    estimator.cap = new_cap
-                    estimator.preload_camera()
+                    # Update all estimators that share this camera_index
+                    for m_other, est_other in self.estimators.items():
+                        if (
+                            self.monitor_camera_mapping.get(m_other, {}).get(
+                                "camera_index"
+                            )
+                            == camera_index
+                        ):
+                            est_other.cap = new_cap
+                            est_other.preload_camera()
 
-            self.wm.notify("Calibration completed!")
+            self.wm.notify("Calibration finished!")
         finally:
             self.is_calibrating = False
             self._calib_lock.release()
@@ -739,7 +757,9 @@ class GazeTracker:
 
             cap = self.camera_cap_mapping.get(camera_index)
             if not cap or not cap.isOpened():
-                self.camera_cap_mapping[camera_index] = cv2.VideoCapture(camera_index)
+                self.camera_cap_mapping[camera_index] = SharedCameraCapture(
+                    camera_index
+                )
 
         for monitor_id, config in self.monitor_camera_mapping.items():
             if not config.get("enabled"):
@@ -771,7 +791,7 @@ class GazeTracker:
         enabled_monitor_ids = [
             m_id
             for m_id, cfg in self.monitor_camera_mapping.items()
-            if cfg.get("enabled", True)
+            if cfg.get("enabled", True) and m_id < len(self.monitor_rects)
         ]
 
         if not enabled_monitor_ids:
@@ -842,6 +862,25 @@ class GazeTracker:
                 logger.debug(f"Error releasing camera {camera_index}: {e}")
         self.wm.notify("Camera released")
         logger.info("Camera released")
+
+    def get_preview_frame(self, camera_index: int) -> tuple[bool, Any]:
+        """
+        Thread-safe preview frame getter.
+        If tracking is active, retrieves the latest buffered frame from
+        SharedCameraCapture to avoid concurrent read() collisions.
+        """
+        cap = self.camera_cap_mapping.get(camera_index)
+        if not cap or not cap.isOpened():
+            try:
+                cap = SharedCameraCapture(camera_index)
+                self.camera_cap_mapping[camera_index] = cap
+            except Exception as e:
+                logger.warning(f"Could not open camera {camera_index} for preview: {e}")
+                return False, None
+
+        if hasattr(cap, "get_preview_frame"):
+            return cap.get_preview_frame(tracking_active=self.running)
+        return cap.read()
 
     def _refresh_monitors(self) -> None:
         """
@@ -971,8 +1010,9 @@ class GazeTracker:
         # Keep current_window in sync with OS focus
         self._sync_focused_window()
 
-        # Try each estimator and use the one where gaze falls within the monitor bounds
-        x = y = None
+        # Evaluate all active estimators and select the best candidate.
+        # Avoids prematurely stopping at Monitor 0.
+        candidates = []
         for monitor_id, estimator in self.estimators.items():
             if not self.monitor_camera_mapping.get(monitor_id, {}).get("enabled", True):
                 continue
@@ -986,17 +1026,67 @@ class GazeTracker:
             except Exception as e:
                 logger.debug(f"Estimator error on monitor {monitor_id}: {e}")
                 continue
-            gx, gy = data["gaze"]["x"], data["gaze"]["y"]
-            if gx is not None and gy is not None:
-                x_virt, y_virt = gx + monitor["left"], gy + monitor["top"]
 
-                # Only use this gaze data if it falls within this monitor's bounds
-                if (
-                    monitor["left"] <= x_virt <= monitor["right"]
-                    and monitor["top"] <= y_virt <= monitor["bottom"]
-                ):
-                    x, y = x_virt, y_virt
-                    break
+            gx, gy = data.get("gaze", {}).get("x"), data.get("gaze", {}).get("y")
+            raw_x = data.get("raw_gaze", {}).get("x")
+            raw_y = data.get("raw_gaze", {}).get("y")
+            if gx is None or gy is None:
+                continue
+
+            x_virt = gx + monitor["left"]
+            y_virt = gy + monitor["top"]
+
+            is_inside = data.get("is_inside", False)
+            confidence = data.get("confidence", 1.0)
+            head_pose = data.get("head_pose", {})
+
+            # Compute boundary margin if raw prediction is available
+            if raw_x is not None and raw_y is not None:
+                margin_x = min(raw_x, monitor["width"] - raw_x)
+                margin_y = min(raw_y, monitor["height"] - raw_y)
+                min_margin = min(margin_x, margin_y)
+            else:
+                min_margin = 0.0
+
+            # Head pose alignment: if gaze target display is left/right
+            # of virtual center, correlate with user's head yaw
+            yaw = head_pose.get("yaw", 0.0) if head_pose else 0.0
+            mon_center_x = monitor["left"] + monitor["width"] / 2.0
+            virt_center_x = (self.virtual_left + self.virtual_right) / 2.0
+            pose_bonus = 0.0
+            if mon_center_x < virt_center_x and yaw < -0.05:
+                pose_bonus = 0.5
+            elif mon_center_x > virt_center_x and yaw > 0.05:
+                pose_bonus = 0.5
+
+            # Score formula: inside gets high base score, plus margin, pose,
+            # and confidence
+            score = (
+                (10.0 if is_inside else 0.0)
+                + (min_margin / 200.0)
+                + pose_bonus
+                + confidence
+            )
+
+            candidates.append(
+                {
+                    "monitor_id": monitor_id,
+                    "x_virt": x_virt,
+                    "y_virt": y_virt,
+                    "is_inside": is_inside,
+                    "score": score,
+                    "min_margin": min_margin,
+                }
+            )
+
+        x = y = None
+        if candidates:
+            candidates.sort(key=lambda c: c["score"], reverse=True)
+            best = candidates[0]
+            # Accept if inside or close to monitor edge (> -120 px)
+            if best["is_inside"] or best["min_margin"] > -120.0:
+                x = best["x_virt"]
+                y = best["y_virt"]
 
         with self._hotkey_state_lock:
             manual_override = self.manual_override_triggered
@@ -1080,6 +1170,7 @@ class GazeTracker:
 
                     self.wm.focus_window(target_window, point=(int(x), int(y)))
                     self.current_window = target_window
+                    self.wm.invalidate_window_cache()
 
                     self.last_auto_focus_time = now
                     self.last_auto_focused_window = target_window
@@ -1112,12 +1203,21 @@ class GazeTracker:
     def _run_tracker(self):
         """
         Main loop to track gaze and focus windows accordingly.
+        Resilient against transient camera or system errors.
         """
+        consecutive_errors = 0
         while self.running:
             try:
                 self._run_tracker_step()
+                consecutive_errors = 0
             except Exception as e:
-                logger.exception(f"Tracking step failed, stopping tracker: {e}")
-                self.shutdown()
-                break
+                consecutive_errors += 1
+                logger.warning(
+                    f"Transient tracking error ({consecutive_errors}/30): {e}"
+                )
+                if consecutive_errors >= 30:
+                    logger.exception(f"Repeated tracking failures, shutting down: {e}")
+                    self.shutdown()
+                    break
+                time.sleep(0.05)
             time.sleep(POLL_INTERVAL)

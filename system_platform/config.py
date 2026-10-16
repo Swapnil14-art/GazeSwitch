@@ -25,13 +25,18 @@ def load_config() -> dict[str, Any]:
         with open(CONFIG_FILE, "r") as f:
             config = json.load(f)
 
-            # Convert string monitor IDs back to integers
+            # Convert monitor IDs to int when possible, preserving string IDs
             if "monitor_camera_mapping" in config:
                 try:
-                    config["monitor_camera_mapping"] = {
-                        int(k): v for k, v in config["monitor_camera_mapping"].items()
-                    }
-                except (ValueError, TypeError) as e:
+                    parsed_mapping = {}
+                    for k, v in config["monitor_camera_mapping"].items():
+                        try:
+                            key = int(k)
+                        except (ValueError, TypeError):
+                            key = str(k)
+                        parsed_mapping[key] = v
+                    config["monitor_camera_mapping"] = parsed_mapping
+                except Exception as e:
                     logger.warning(
                         f"Invalid monitor IDs in config: {e}. Using default config."
                     )

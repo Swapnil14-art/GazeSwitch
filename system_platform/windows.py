@@ -1,6 +1,7 @@
 import ctypes
 import logging
 import threading
+import time
 from ctypes import wintypes
 
 import win32api
@@ -14,6 +15,44 @@ from system_platform.window_manager import MonitorListener, WindowManager
 from ui.tray import resource_path
 
 logger = logging.getLogger(__name__)
+
+
+def enable_per_monitor_dpi_v2() -> bool:
+    """
+    Enable Windows Per-Monitor DPI Awareness V2 so that DWM and Win32
+    return true physical pixel coordinates matching monitor bounds and camera gaze.
+    """
+    try:
+        # DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4
+        res = ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
+        if res:
+            logger.info("Per-Monitor V2 DPI awareness enabled successfully")
+            return True
+    except Exception as e:
+        logger.debug(f"SetProcessDpiAwarenessContext failed: {e}")
+
+    try:
+        # PROCESS_PER_MONITOR_DPI_AWARE = 2
+        res = ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        if res == 0:
+            logger.info("Per-Monitor DPI awareness (shcore) enabled")
+            return True
+    except Exception as e:
+        logger.debug(f"SetProcessDpiAwareness failed: {e}")
+
+    try:
+        res = ctypes.windll.user32.SetProcessDPIAware()
+        if res:
+            logger.info("Process DPI aware enabled (legacy fallback)")
+            return True
+    except Exception as e:
+        logger.debug(f"SetProcessDPIAware fallback failed: {e}")
+
+    return False
+
+
+# Initialize DPI awareness on module load
+enable_per_monitor_dpi_v2()
 
 try:
     dwmapi = ctypes.windll.dwmapi
@@ -122,12 +161,19 @@ class WindowsWindowManager(WindowManager):
 
     def __init__(self):
         super().__init__()
+        enable_per_monitor_dpi_v2()
         self._uia = None
         self._uia_initialized = False
         self._TreeScope_Descendants = None
         self._UIA_ControlTypePropertyId = None
         self._UIA_EditControlTypeId = None
         self._UIA_DocumentControlTypeId = None
+        self._cached_windows: list[dict] = []
+        self._last_windows_time: float = 0.0
+        self._cache_ttl: float = 0.25
+
+    def invalidate_window_cache(self) -> None:
+        self._last_windows_time = 0.0
 
     def _init_uia(self):
         if self._uia_initialized:
@@ -275,7 +321,15 @@ class WindowsWindowManager(WindowManager):
 
         return False
 
-    def get_windows(self) -> list[dict]:
+    def get_windows(self, force_refresh: bool = False) -> list[dict]:
+        now = time.time()
+        if (
+            not force_refresh
+            and self._cached_windows
+            and (now - self._last_windows_time) < self._cache_ttl
+        ):
+            return self._cached_windows
+
         windows = []
 
         def is_cloaked(hwnd: int) -> bool:
@@ -337,7 +391,12 @@ class WindowsWindowManager(WindowManager):
             windows.append({"hwnd": hwnd, "title": title, "rect": rect})
             return True
 
-        win32gui.EnumWindows(callback, None)
+        try:
+            win32gui.EnumWindows(callback, None)
+        except Exception as e:
+            logger.debug(f"EnumWindows query error: {e}")
+        self._cached_windows = windows
+        self._last_windows_time = now
         return windows
 
     def focus_window(self, window: dict, point: tuple[int, int] | None = None) -> None:
@@ -391,11 +450,18 @@ class WindowsWindowManager(WindowManager):
         except Exception as e:
             logger.exception(f"Could not focus window: {e}")
 
-        # If the screen/window has a typing option, select it without moving the mouse
-        try:
-            self.select_typing_option(hwnd, point)
-        except Exception as e:
-            logger.debug(f"Could not select typing option: {e}")
+        # Invalidate cache so subsequent hit tests observe the new foreground Z-order
+        self.invalidate_window_cache()
+
+        # If the screen/window has a typing option, select it asynchronously
+        # without moving mouse
+        def async_select():
+            try:
+                self.select_typing_option(hwnd, point)
+            except Exception as e:
+                logger.debug(f"Could not select typing option: {e}")
+
+        threading.Thread(target=async_select, daemon=True).start()
 
     def get_screen_size(self) -> tuple[int, int]:
         return win32api.GetSystemMetrics(0), win32api.GetSystemMetrics(1)
